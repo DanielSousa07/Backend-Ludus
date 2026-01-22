@@ -13,6 +13,40 @@ model User {
   email     String   @unique
   password  String
   senhaHash String
+  role String @default("USER") // pode ser ADMIN
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  games Game[]
+
+  rentals Rental[]
+}
+
+model Game {
+  id      String @id @default(uuid())
+  ludopediaId Int? 
+  title String 
+  description String?
+  price Float
+  available Boolean @default(true)
+  cover String?  ///URL Da imagem
+
+  userId String
+  owner User  @relation(fields: [userId], references: [id])
+
+  rentals  Rental[]
+}
+
+model Rental {
+  id String @id
+  startDate DateTime @default(now())
+  endDate DateTime
+  status String @default("PEDDING")
+
+  userId  String
+  user User @relation(fields: [userId], references: [id])
+
+  gameId String
+  game Game  @relation(fields: [gameId], references: [id])
+
 }

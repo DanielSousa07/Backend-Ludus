@@ -22,7 +22,9 @@ export async function login(email: string, senha: string) {
 
     // 4. Gera o Token (usa a chave do teu .env)
     const token = jwt.sign(
-        { id: user.id },
+        { id: user.id,
+            role: user.role
+         },
         process.env.JWT_SECRET || "secret_fallback",
         { expiresIn: "7d" }
     );
@@ -33,6 +35,7 @@ export async function login(email: string, senha: string) {
             id: user.id,
             nome: user.name,
             email: user.email,
+            role: user.role
         },
     };
 }

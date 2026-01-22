@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { login } from "../services/auth.service"; // Importa a função que já analisamos
+import { login } from "../services/auth.service"; 
 import bcrypt from "bcryptjs";
 import {prisma} from "../lib/prisma"
 
@@ -16,13 +16,10 @@ router.post("/login", async (req, res) => {
     }
 });
 
-// src/routes/auth.routes.ts
-// src/routes/auth.routes.ts
-
 router.post("/register", async (req, res) => {
     const { name, email, senha } = req.body;
     try {
-        // O BCrypt cria a senhaHash automaticamente aqui
+    
         const salt = await bcrypt.genSalt(10);
         const hash = await bcrypt.hash(senha, salt);
 
@@ -30,8 +27,8 @@ router.post("/register", async (req, res) => {
             data: {
                 name,
                 email,
-                senhaHash: hash, // Aqui o hash é gerado e salvo
-                password: senha  // Salva o texto puro (conforme seu schema atual)
+                senhaHash: hash, 
+                password: senha  
             }
         });
         return res.status(201).json(newUser);
