@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Game" ADD COLUMN     "minTime" INTEGER NOT NULL DEFAULT 0;

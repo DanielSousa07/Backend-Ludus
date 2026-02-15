@@ -23,13 +23,20 @@ model User {
 }
 
 model Game {
-  id      String @id @default(uuid())
-  ludopediaId Int? 
-  title String 
+id          String   @id @default(uuid())
+  ludopediaId Int?
+  title       String
   description String?
-  price Float
-  available Boolean @default(true)
-  cover String?  ///URL Da imagem
+  price       Float
+  available   Boolean  @default(true)
+  cover       String?  
+  
+  rating      Float    @default(0)    
+  minPlayers  Int      @default(1)    
+  maxPlayers  Int?                    
+  minAge      Int      @default(0)     
+  minTime Int @default(0)
+  maxTime     Int?                 
 
   userId String
   owner User  @relation(fields: [userId], references: [id])
