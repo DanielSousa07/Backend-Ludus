@@ -11,6 +11,10 @@ model User {
   id        String   @id @default(uuid())
   name      String
   email     String   @unique
+  phone     String?  @unique
+  phoneVerified    Boolean   @default(false)
+  verificationCode String?   // Onde o código de 6 dígitos será salvo
+  codeExpiresAt    DateTime?
   password  String
   senhaHash String
   role String @default("USER") // pode ser ADMIN
