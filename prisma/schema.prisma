@@ -8,56 +8,58 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  phone     String?  @unique
-  phoneVerified    Boolean   @default(false)
-  verificationCode String?   // Onde o código de 6 dígitos será salvo
+  id               String   @id @default(uuid())
+  name             String
+  email            String   @unique
+  phone            String?  @unique
+
+  phoneVerified    Boolean  @default(false)
+  verificationCode String?
   codeExpiresAt    DateTime?
-  password  String
-  senhaHash String
-  role String @default("USER") // pode ser ADMIN
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  lastCodeSentAt DateTime?
 
-  games Game[]
 
-  rentals Rental[]
+  senhaHash        String
+  role             String   @default("USER")
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  games            Game[]
+  rentals          Rental[]
 }
 
 model Game {
-id          String   @id @default(uuid())
+  id          String   @id @default(uuid())
   ludopediaId Int?
   title       String
   description String?
   price       Float
   available   Boolean  @default(true)
-  cover       String?  
-  
-  rating      Float    @default(0)    
-  minPlayers  Int      @default(1)    
-  maxPlayers  Int?                    
-  minAge      Int      @default(0)     
-  minTime Int @default(0)
-  maxTime     Int?                 
+  cover       String?
 
-  userId String
-  owner User  @relation(fields: [userId], references: [id])
+  rating      Float    @default(0)
+  minPlayers  Int      @default(1)
+  maxPlayers  Int?
+  minAge      Int      @default(0)
+  minTime     Int      @default(0)
+  maxTime     Int?
 
-  rentals  Rental[]
+  userId      String
+  owner       User     @relation(fields: [userId], references: [id])
+
+  rentals     Rental[]
 }
 
 model Rental {
-  id String @id
+  id        String   @id @default(uuid())
   startDate DateTime @default(now())
-  endDate DateTime
-  status String @default("PEDDING")
+  endDate   DateTime
+  status    String   @default("PENDING") // Corrigi "PEDDING"
 
-  userId  String
-  user User @relation(fields: [userId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
 
-  gameId String
-  game Game  @relation(fields: [gameId], references: [id])
-
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id])
 }
