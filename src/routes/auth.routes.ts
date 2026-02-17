@@ -66,10 +66,10 @@ router.post("/register", async (req, res) => {
 });
 
 router.post("/verify-phone", async (req, res) => {
-    const { userId, code } = req.body;
+    const { phone, code } = req.body;
 
     const user = await prisma.user.findUnique({
-        where: { id: userId }
+        where: { phone: phone, verificationCode: code }
     });
 
     if (!user || user.verificationCode !== code) {
@@ -78,7 +78,7 @@ router.post("/verify-phone", async (req, res) => {
 
     
     await prisma.user.update({
-        where: { id: userId },
+        where: { id: user.id },
         data: { 
             phoneVerified: true,
             verificationCode: null 
