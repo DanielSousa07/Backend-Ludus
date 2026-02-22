@@ -27,7 +27,7 @@ gameRoutes.get("/search-ludopedia", ensureAuthenticated, ensureAdmin, async (req
 
 
 gameRoutes.get("/", async (req, res) => {
-    const { q, status, players, age, priceMin, priceMax, timeMax } = req.query;
+    const { q, status, players, age, priceMin, priceMax, timeMax, stars } = req.query;
 
     const where: any = {};
 
@@ -67,6 +67,23 @@ gameRoutes.get("/", async (req, res) => {
         const a = Number(age);
         if (!isNaN(a)) {
             where.minAge = { lte: a };
+        }
+    }
+
+    
+    if (stars && String(stars).trim()) {
+        const list = String(stars)
+            .split(",")
+            .map((s) => Number(s.trim()))
+            .filter((n) => [1, 2, 3, 4, 5].includes(n));
+
+        if (list.length) {
+            where.OR = list.map((n) => {
+                const min = n - 0.5;
+                
+                const max = n === 5 ? 5.0 : n + 0.5 - 0.0001;
+                return { rating: { gte: min, lte: max } };
+            });
         }
     }
 
@@ -115,23 +132,99 @@ gameRoutes.post("/", ensureAuthenticated, ensureAdmin, async (req, res) => {
     }
 });
 
-gameRoutes.get("/:id", async (req, res) => {
-    const { id } = req.params
+gameRoutes.patch("/:id", ensureAuthenticated, ensureAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { title, price, description, available } = req.body;
 
-    try {
-        const game = await prisma.game.findUnique({
-            where: { id: String(id) },
-        })
+  const data: any = {};
 
-        if (!game) {
-            return res.status(404).json({ error: "Jogo não encontrado" });
-        }
-        return res.json(game);
-    } catch (err) {
-        console.error("Erro ao buscar jogo", err);
-        return res.status(500).json({ error: "Erro ao buscar detalhes do jogo" })
+  if (typeof title === "string") data.title = title.trim();
+  if (typeof description === "string") data.description = description;
+  if (typeof available === "boolean") data.available = available;
+
+  if (price !== undefined) {
+    const p = Number(String(price).replace(",", "."));
+    if (Number.isNaN(p) || p < 0) {
+      return res.status(400).json({ error: "Preço inválido" });
     }
-})
+    data.price = p;
+  }
+
+  try {
+    const updated = await prisma.game.update({
+      where: { id: String(id) },
+      data,
+    });
+
+    return res.json(updated);
+  } catch (err: any) {
+    console.error("Erro ao atualizar jogo:", err);
+
+    
+    if (err?.code === "P2025") {
+      return res.status(404).json({ error: "Jogo não encontrado" });
+    }
+
+    return res.status(500).json({ error: "Erro ao atualizar jogo" });
+  }
+});
+
+gameRoutes.delete("/:id", ensureAuthenticated, ensureAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const rentalsCount = await prisma.rental.count({
+      where: { gameId: String(id) },
+    });
+
+    if (rentalsCount > 0) {
+      return res.status(409).json({
+        error: "Não é possível excluir este jogo porque ele possui histórico de aluguel.",
+        code: "GAME_HAS_RENTALS",
+      });
+    }
+
+    await prisma.game.delete({
+      where: { id: String(id) },
+    });
+
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error("Erro ao excluir jogo:", err);
+
+    if (err?.code === "P2025") {
+      return res.status(404).json({ error: "Jogo não encontrado" });
+    }
+
+    return res.status(500).json({ error: "Erro ao excluir jogo" });
+  }
+});
+
+gameRoutes.get("/:id", ensureAuthenticated, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const game = await prisma.game.findUnique({
+      where: { id: String(id) },
+    });
+
+    if (!game) {
+      return res.status(404).json({ error: "Jogo não encontrado" });
+    }
+
+    const myRating = await prisma.gameRating.findUnique({
+      where: { userId_gameId: { userId: req.user.id, gameId: String(id) } },
+    });
+
+    return res.json({
+      ...game,
+      myRating: myRating?.value ?? null,
+    });
+  } catch (err) {
+    console.error("Erro ao buscar jogo", err);
+    return res.status(500).json({ error: "Erro ao buscar detalhes do jogo" });
+  }
+});
 
 gameRoutes.post("/:id/rating", ensureAuthenticated, async (req, res) => {
     const { id } = req.params
@@ -152,9 +245,9 @@ gameRoutes.post("/:id/rating", ensureAuthenticated, async (req, res) => {
     })
 
     const agg = await prisma.gameRating.aggregate({
-        where: {gameId: id},
-        _avg: {value: true},
-        _count: {value: true},
+        where: { gameId: id },
+        _avg: { value: true },
+        _count: { value: true },
 
     });
 
@@ -162,12 +255,12 @@ gameRoutes.post("/:id/rating", ensureAuthenticated, async (req, res) => {
     const count = Number(agg._count.value ?? 0);
 
     await prisma.game.update({
-        where: {id},
-        data: {rating: avg, ratingsCount: count},
+        where: { id },
+        data: { rating: avg, ratingsCount: count },
 
     });
 
-    return res.json({ok: true, acgRating: avg, ratingsCount: count, myRating: value})
+    return res.json({ ok: true, avgRating: avg, ratingsCount: count, myRating: value })
 })
 
 export { gameRoutes };
