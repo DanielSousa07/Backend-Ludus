@@ -33,7 +33,7 @@ export async function ensureAuthenticated(
       select: {
         id: true,
         role: true,
-        phoneVerified: true,
+        emailVerified: true,
       },
     });
 
@@ -41,12 +41,13 @@ export async function ensureAuthenticated(
       return res.status(401).json({ error: "Utilizador não encontrado" });
     }
 
-    if (!user.phoneVerified) {
+    if (!user.emailVerified) {
       return res.status(403).json({
-        error: "Sua conta precisa ser verificada por SMS.",
-        code: "PHONE_NOT_VERIFIED",
+        error: "Sua conta precisa ser verificada por e-mail.",
+        code: "EMAIL_NOT_VERIFIED",
       });
     }
+
 
     req.user = {
       id: user.id,

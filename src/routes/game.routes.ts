@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
 import { ensureAdmin } from "../middlewares/ensureAdmin";
-import { searchLudopedia } from "../services/ludopedia.service"; 
+import { searchLudopedia } from "../services/ludopedia.service";
 import { prisma } from "../lib/prisma"; //
 import { getLudopediaGameDetails } from "../services/ludopedia.service";
 import { error } from "node:console";
@@ -24,7 +24,7 @@ gameRoutes.get("/search-ludopedia", ensureAuthenticated, ensureAdmin, async (req
     }
 });
 
-// src/routes/game.routes.ts
+
 
 gameRoutes.get("/", async (req, res) => {
     const { q, status, players, age, priceMin, priceMax, timeMax } = req.query;
@@ -45,33 +45,33 @@ gameRoutes.get("/", async (req, res) => {
             lte: priceMax ? parseFloat(String(priceMax)) : 1000
         };
     }
-    
-    // 1. FILTRO DE TEMPO: Usando maxTime (o campo que você tem no banco)
+
+
     if (timeMax && timeMax !== 'null') {
         const time = Number(timeMax);
         if (!isNaN(time)) {
-            where.maxTime = { lte: time }; // Jogos com tempo máximo até X
+            where.maxTime = { lte: time };
         }
     }
 
-    // 2. FILTRO DE JOGADORES: "Suporta este número ou menos"
+
     if (players && players !== 'null') {
         const p = Number(players);
         if (!isNaN(p)) {
-            where.maxPlayers = { lte: p }; // maxPlayers no banco deve ser <= selecionado
+            where.maxPlayers = { lte: p };
         }
     }
 
-    // 3. FILTRO DE IDADE: "Idade selecionada ou menos"
+
     if (age && age !== 'null') {
         const a = Number(age);
         if (!isNaN(a)) {
-            where.minAge = { lte: a }; // minAge no banco deve ser <= selecionado
+            where.minAge = { lte: a };
         }
     }
 
     try {
-        const games = await prisma.game.findMany({ 
+        const games = await prisma.game.findMany({
             where,
             orderBy: { title: 'asc' }
         });
@@ -83,10 +83,10 @@ gameRoutes.get("/", async (req, res) => {
 });
 
 gameRoutes.post("/", ensureAuthenticated, ensureAdmin, async (req, res) => {
-    const { ludopediaId, title, cover, price } = req.body;
+    const { ludopediaId, title, cover, price, description } = req.body;
 
     try {
-    
+
         const details = await getLudopediaGameDetails(Number(ludopediaId));
 
         const game = await prisma.game.create({
@@ -97,9 +97,9 @@ gameRoutes.post("/", ensureAuthenticated, ensureAdmin, async (req, res) => {
                 price: parseFloat(price),
                 available: true,
                 userId: req.user.id,
-                
-                
-                description: details?.description || "",
+
+
+                description: description?.toString() || "",
                 rating: details?.rating || 0,
                 minPlayers: details?.minPlayers || 1,
                 maxPlayers: details?.maxPlayers,
@@ -114,5 +114,60 @@ gameRoutes.post("/", ensureAuthenticated, ensureAdmin, async (req, res) => {
         return res.status(400).json({ error: "Erro ao cadastrar jogo" });
     }
 });
+
+gameRoutes.get("/:id", async (req, res) => {
+    const { id } = req.params
+
+    try {
+        const game = await prisma.game.findUnique({
+            where: { id: String(id) },
+        })
+
+        if (!game) {
+            return res.status(404).json({ error: "Jogo não encontrado" });
+        }
+        return res.json(game);
+    } catch (err) {
+        console.error("Erro ao buscar jogo", err);
+        return res.status(500).json({ error: "Erro ao buscar detalhes do jogo" })
+    }
+})
+
+gameRoutes.post("/:id/rating", ensureAuthenticated, async (req, res) => {
+    const { id } = req.params
+    const value = Number(req.body?.value);
+
+    if (![1, 2, 3, 4, 5].includes(value)) {
+        return res.status(400).json({ error: "value deve ser de 1 a 5" });
+    }
+
+    const game = await prisma.game.findUnique({ where: { id } });
+    if (!game) return res.status(404).json({ error: "Jogo não encontrado" });
+
+    await prisma.gameRating.upsert({
+        where: { userId_gameId: { userId: req.user.id, gameId: id } },
+        create: { userId: req.user.id, gameId: id, value },
+        update: { value },
+
+    })
+
+    const agg = await prisma.gameRating.aggregate({
+        where: {gameId: id},
+        _avg: {value: true},
+        _count: {value: true},
+
+    });
+
+    const avg = Number(agg._avg.value ?? 0);
+    const count = Number(agg._count.value ?? 0);
+
+    await prisma.game.update({
+        where: {id},
+        data: {rating: avg, ratingsCount: count},
+
+    });
+
+    return res.json({ok: true, acgRating: avg, ratingsCount: count, myRating: value})
+})
 
 export { gameRoutes };

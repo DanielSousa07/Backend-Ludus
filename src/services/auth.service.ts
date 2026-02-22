@@ -24,14 +24,10 @@ export async function login(emailOrPhone: string, senha: string) {
     throw new Error("Usuário ou senha inválidos");
   }
 
-  // ✅ userId em sub para bater com ensureAuthenticated
   const token = jwt.sign(
     { role: user.role },
     process.env.JWT_SECRET || "secret_fallback",
-    {
-      subject: user.id,
-      expiresIn: "7d",
-    }
+    { subject: user.id, expiresIn: "7d" }
   );
 
   return {
@@ -42,7 +38,8 @@ export async function login(emailOrPhone: string, senha: string) {
       email: user.email,
       phone: user.phone,
       role: user.role,
-      phoneVerified: user.phoneVerified,
+      emailVerified: user.emailVerified, 
+      phoneVerified: user.phoneVerified, 
     },
   };
 }

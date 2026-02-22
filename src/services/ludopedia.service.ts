@@ -19,7 +19,7 @@ export async function searchLudopedia(query: string) {
             return [];
         }
         return response.data.jogos.map((j: any) => ({
-            // Tenta pegar id_jogo ou id, nm_jogo ou nome
+            
             id: j.id_jogo || j.id,
             name: j.nm_jogo || j.nome || j.name,
             image: j.thumb || j.imagem || j.img,
@@ -27,7 +27,7 @@ export async function searchLudopedia(query: string) {
         }));
 
     } catch (error: any) {
-        // Log para veres o erro real no terminal do VS Code
+    
         console.error("Erro na API Ludopedia:", error.response?.data || error.message);
         throw new Error("Erro ao consultar Ludopedia");
     }

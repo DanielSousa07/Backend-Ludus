@@ -8,58 +8,81 @@ datasource db {
 }
 
 model User {
-  id               String   @id @default(uuid())
-  name             String
-  email            String   @unique
-  phone            String?  @unique
+  id    String  @id @default(uuid())
+  name  String
+  email String  @unique
+  phone String? @unique
 
-  phoneVerified    Boolean  @default(false)
+  emailVerified         Boolean   @default(false)
+  emailVerificationCode String?
+  emailCodeExpiresAt    DateTime?
+  lastEmailSentAt       DateTime?
+
+  phoneVerified    Boolean   @default(false)
   verificationCode String?
   codeExpiresAt    DateTime?
-  lastCodeSentAt DateTime?
+  lastCodeSentAt   DateTime?
 
+  senhaHash String
+  role      String @default("USER")
 
-  senhaHash        String
-  role             String   @default("USER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  games            Game[]
-  rentals          Rental[]
+  games   Game[]
+  rentals Rental[]
+  ratings   GameRating[]   
 }
 
 model Game {
-  id          String   @id @default(uuid())
+  id          String  @id @default(uuid())
   ludopediaId Int?
   title       String
   description String?
   price       Float
-  available   Boolean  @default(true)
+  available   Boolean @default(true)
   cover       String?
 
-  rating      Float    @default(0)
-  minPlayers  Int      @default(1)
-  maxPlayers  Int?
-  minAge      Int      @default(0)
-  minTime     Int      @default(0)
-  maxTime     Int?
+  rating       Float @default(0)
+  ratingsCount Int?
 
-  userId      String
-  owner       User     @relation(fields: [userId], references: [id])
+  minPlayers Int  @default(1)
+  maxPlayers Int?
+  minAge     Int  @default(0)
+  minTime    Int  @default(0)
+  maxTime    Int?
 
-  rentals     Rental[]
+  userId String
+  owner  User   @relation(fields: [userId], references: [id])
+
+  rentals Rental[]
+  ratings GameRating[]
+}
+
+model GameRating {
+  id       String   @id @default(uuid())
+  value    Int
+  createdAt DateTime @default(now())
+  updateAt DateTime @updatedAt
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  gameId String
+  game   Game  @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
 }
 
 model Rental {
   id        String   @id @default(uuid())
   startDate DateTime @default(now())
   endDate   DateTime
-  status    String   @default("PENDING") // Corrigi "PEDDING"
+  status    String   @default("PENDING")
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  gameId    String
-  game      Game     @relation(fields: [gameId], references: [id])
+  gameId String
+  game   Game   @relation(fields: [gameId], references: [id])
 }
