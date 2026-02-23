@@ -5,6 +5,9 @@ import { prisma } from './lib/prisma';
 import authRoutes from "./routes/auth.routes"; 
 import { gameRoutes } from "./routes/game.routes";
 import { gameCopyRoutes } from "./routes/gameCopy.routes";
+import { rentalRoutes } from "./routes/rental.routes";
+import { adminRentalRoutes } from "./routes/adminRental.routes";
+
 
 const app = express();
 
@@ -17,6 +20,8 @@ app.use("/auth", authRoutes);
 app.use("/games", gameRoutes)
 app.use("/games", gameCopyRoutes)
 
+app.use("/rentals", rentalRoutes);
+app.use("/admin/rentals", adminRentalRoutes);
 
 app.get("/", (req, res) => {
     res.send("API Ludus rodando 🚀")

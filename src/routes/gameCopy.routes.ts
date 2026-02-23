@@ -17,6 +17,25 @@ function formatCopyCode(title: string, num: number) {
     return `${slug}-${String(num).padStart(3, "0")}`;
 }
 
+gameCopyRoutes.get("/:gameId/copies/available", ensureAuthenticated, async (req, res) => {
+  const { gameId } = req.params;
+
+  try {
+    const game = await prisma.game.findUnique({ where: { id: String(gameId) } });
+    if (!game) return res.status(404).json({ error: "Jogo não encontrado" });
+
+    const copies = await prisma.gameCopy.findMany({
+      where: { gameId: String(gameId), available: true },
+      orderBy: { number: "asc" },
+      select: { id: true, code: true, number: true, condition: true, available: true },
+    });
+
+    return res.json(copies);
+  } catch (err) {
+    console.error("Erro ao listar exemplares disponíveis:", err);
+    return res.status(500).json({ error: "Erro ao listar exemplares disponíveis" });
+  }
+});
 
 gameCopyRoutes.get("/:gameId/copies", ensureAuthenticated, ensureAdmin, async (req, res) => {
     const { gameId } = req.params;
