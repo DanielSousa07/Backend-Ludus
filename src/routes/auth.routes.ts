@@ -3,8 +3,12 @@ import bcrypt from "bcryptjs";
 import twilio from "twilio";
 import { Resend } from "resend";
 
+
+
+
+
 import { prisma } from "../lib/prisma";
-import { login } from "../services/auth.service";
+import { login, loginWithGoogle } from "../services/auth.service";
 
 const router = Router();
 
@@ -15,7 +19,7 @@ const client = twilio(
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// helpers
+
 function gen6() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -34,7 +38,42 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// ✅ REGISTER: cria conta e envia código por EMAIL (não envia SMS)
+router.post("/google", async (req, res) => {
+  const { idToken } = req.body;
+  if (!idToken) return res.status(400).json({ error: "idToken é obrigatório" });
+
+  try {
+    const result = await loginWithGoogle(idToken);
+    return res.json(result);
+  } catch (err: any) {
+    
+    console.error("ERRO /auth/google:", err);
+
+    
+    const prismaCode = err?.code;
+
+  
+    const msg = err?.message || "Falha ao autenticar com Google";
+
+  
+    const isAuthError =
+      msg.toLowerCase().includes("token") ||
+      msg.toLowerCase().includes("jwt") ||
+      msg.toLowerCase().includes("audience") ||
+      msg.toLowerCase().includes("invalid");
+
+    if (isAuthError) {
+      return res.status(401).json({ error: msg });
+    }
+
+  
+    return res.status(500).json({
+      error: msg,
+      prismaCode,
+    });
+  }
+});
+
 router.post("/register", async (req, res) => {
   const { name, email, phone, senha } = req.body;
 
@@ -69,13 +108,13 @@ router.post("/register", async (req, res) => {
         phone: cleanPhone,
         senhaHash: hash,
 
-        // email verification
+        
         emailVerified: false,
         emailVerificationCode: emailCode,
         emailCodeExpiresAt: emailExpiresAt,
         lastEmailSentAt: now,
 
-        // sms (opcional)
+        
         phoneVerified: false,
       },
       select: {
@@ -89,7 +128,6 @@ router.post("/register", async (req, res) => {
       },
     });
 
-    // envia email (não quebrar registro se falhar)
     try {
       const from = process.env.RESEND_FROM || "Ludus <onboarding@resend.dev>";
       await resend.emails.send({
@@ -109,7 +147,7 @@ router.post("/register", async (req, res) => {
       });
     } catch (e) {
       console.log("Falha ao enviar e-mail (Resend):", e);
-      // registra ok mesmo assim — user pode pedir reenviar
+    
     }
 
     return res.status(201).json({
@@ -122,7 +160,7 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// ✅ VERIFY EMAIL (obrigatório para liberar /home)
+
 router.post("/verify-email", async (req, res) => {
   const { email, code } = req.body;
 
@@ -160,7 +198,7 @@ router.post("/verify-email", async (req, res) => {
   return res.json({ message: "E-mail verificado com sucesso!" });
 });
 
-// ✅ RESEND EMAIL CODE (30s cooldown)
+
 router.post("/resend-email-code", async (req, res) => {
   const { email } = req.body;
   const cleanEmail = (email || "").trim().toLowerCase();
@@ -215,10 +253,7 @@ router.post("/resend-email-code", async (req, res) => {
   return res.json({ message: "Novo código enviado por e-mail!" });
 });
 
-// ------------------- SMS (opcional) -------------------
-// Mantive sua rota /verify-phone e /resend-code. Você pode usar depois no perfil.
 
-// verify phone (quando user escolher SMS)
 router.post("/verify-phone", async (req, res) => {
   const { phone, code } = req.body;
 
@@ -254,7 +289,7 @@ router.post("/verify-phone", async (req, res) => {
   return res.json({ message: "Telefone verificado com sucesso!" });
 });
 
-// resend sms (quando user escolher SMS)
+
 router.post("/resend-code", async (req, res) => {
   const { phone } = req.body;
   const cleanPhone = cleanDigits(phone);
@@ -291,7 +326,7 @@ router.post("/resend-code", async (req, res) => {
     },
   });
 
-  // ⚠️ Twilio trial pode falhar — retorna erro amigável
+  
   try {
     await client.messages.create({
       body: `Seu código de verificação Ludus é: ${newCode}`,

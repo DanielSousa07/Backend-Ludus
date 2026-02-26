@@ -7,6 +7,7 @@ import { gameRoutes } from "./routes/game.routes";
 import { gameCopyRoutes } from "./routes/gameCopy.routes";
 import { rentalRoutes } from "./routes/rental.routes";
 import { adminRentalRoutes } from "./routes/adminRental.routes";
+import { engagementRoutes } from "./routes/engagement.routes";
 
 
 const app = express();
@@ -22,6 +23,7 @@ app.use("/games", gameCopyRoutes)
 
 app.use("/rentals", rentalRoutes);
 app.use("/admin/rentals", adminRentalRoutes);
+app.use("/engagement", engagementRoutes);
 
 app.get("/", (req, res) => {
     res.send("API Ludus rodando 🚀")

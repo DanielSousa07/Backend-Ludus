@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
 model User {
   id    String  @id @default(uuid())
   name  String
@@ -23,15 +28,22 @@ model User {
   codeExpiresAt    DateTime?
   lastCodeSentAt   DateTime?
 
-  senhaHash String
+  points Int @default(0)
+  level  Int @default(1)
+
+  senhaHash     String?
+  googleSub     String? @unique
+  authProvider  AuthProvider @default(LOCAL)
+
   role      String @default("USER")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  games   Game[]
-  rentals Rental[]
-  ratings   GameRating[]   
+  games       Game[]
+  rentals     Rental[]
+  ratings     GameRating[]
+  pointsLogs  UserPointsLog[]
 }
 
 model Game {
@@ -43,7 +55,6 @@ model Game {
   available   Boolean @default(true)
   cover       String?
   allowOriginalRental Boolean @default(true)
-
 
   rating       Float @default(0)
   ratingsCount Int?
@@ -62,10 +73,22 @@ model Game {
   copies GameCopy[]
 }
 
+model UserPointsLog {
+  id        String   @id @default(uuid())
+  userId    String
+  points    Int
+  reason    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
 model GameCopy {
   id        String   @id @default(uuid())
-  number    Int      
-  code      String?  
+  number    Int
+  code      String?
   condition String?
   available Boolean  @default(true)
 
@@ -77,7 +100,7 @@ model GameCopy {
 
   rentals Rental[]
 
-  @@unique([gameId, number]) 
+  @@unique([gameId, number])
 }
 
 model GameRating {
@@ -95,11 +118,18 @@ model GameRating {
   @@unique([userId, gameId])
 }
 
+enum RentalStatus {
+  PENDING
+  ACTIVE
+  RETURNED
+  CANCELED
+}
+
 model Rental {
-  id        String   @id @default(uuid())
-  startDate DateTime @default(now())
+  id        String       @id @default(uuid())
+  startDate DateTime     @default(now())
   endDate   DateTime
-  status    String   @default("PENDING")
+  status    RentalStatus @default(PENDING)
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
@@ -112,4 +142,5 @@ model Rental {
 
   @@index([gameId])
   @@index([copyId])
+  @@index([userId])
 }

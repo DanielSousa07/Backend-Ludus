@@ -1,27 +1,30 @@
 import { Router } from "express";
+import { RentalStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
 import { ensureAdmin } from "../middlewares/ensureAdmin";
+import { addUserPoints } from "../services/engagement.service";
 
 export const adminRentalRoutes = Router();
-
 
 adminRentalRoutes.get("/", ensureAuthenticated, ensureAdmin, async (req, res) => {
   const { status, q, overdue } = req.query;
 
   const where: any = {};
 
-  if (status && typeof status === "string" && status !== "ALL") {
-    where.status = status;
+  if (typeof status === "string" && status !== "ALL") {
+    if (!Object.values(RentalStatus).includes(status as RentalStatus)) {
+      return res.status(400).json({ error: "status inválido" });
+    }
+    where.status = status as RentalStatus;
   }
 
-  
   if (overdue === "true") {
     where.endDate = { lt: new Date() };
-    where.status = { in: ["PENDING", "ACTIVE"] };
+    where.status = { in: [RentalStatus.PENDING, RentalStatus.ACTIVE] };
   }
 
-  if (q && typeof q === "string" && q.trim()) {
+  if (typeof q === "string" && q.trim()) {
     const term = q.trim();
     where.OR = [
       { game: { title: { contains: term, mode: "insensitive" } } },
@@ -49,12 +52,21 @@ adminRentalRoutes.get("/", ensureAuthenticated, ensureAdmin, async (req, res) =>
   }
 });
 
-
 adminRentalRoutes.patch("/:id/status", ensureAuthenticated, ensureAdmin, async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body as { status?: string };
+  const { status } = req.body as { status?: RentalStatus };
 
-  if (!["ACTIVE", "RETURNED", "CANCELED"].includes(String(status))) {
+  if (!status) {
+    return res.status(400).json({ error: "status é obrigatório" });
+  }
+
+  const ALLOWED: RentalStatus[] = [
+    RentalStatus.ACTIVE,
+    RentalStatus.RETURNED,
+    RentalStatus.CANCELED,
+  ];
+
+  if (!ALLOWED.includes(status)) {
     return res.status(400).json({ error: "status inválido" });
   }
 
@@ -62,14 +74,14 @@ adminRentalRoutes.patch("/:id/status", ensureAuthenticated, ensureAdmin, async (
     const rental = await prisma.rental.findUnique({ where: { id: String(id) } });
     if (!rental) return res.status(404).json({ error: "Aluguel não encontrado" });
 
-    
-    if (["RETURNED", "CANCELED"].includes(rental.status) && status !== rental.status) {
+    const FINALIZED: RentalStatus[] = [RentalStatus.RETURNED, RentalStatus.CANCELED];
+
+    if (FINALIZED.includes(rental.status) && status !== rental.status) {
       return res.status(409).json({ error: "Aluguel já finalizado", code: "RENTAL_FINALIZED" });
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      
-      if (status === "RETURNED" || status === "CANCELED") {
+      if (status === RentalStatus.RETURNED || status === RentalStatus.CANCELED) {
         if (rental.copyId) {
           await tx.gameCopy.update({
             where: { id: rental.copyId },
@@ -88,6 +100,18 @@ adminRentalRoutes.patch("/:id/status", ensureAuthenticated, ensureAdmin, async (
         data: { status },
       });
     });
+
+    if (status === RentalStatus.RETURNED) {
+      try {
+        await addUserPoints({
+          userId: updated.userId,
+          delta: 5,
+          reason: `ADMIN_RENTAL_RETURNED:${updated.id}`,
+        });
+      } catch (pointsErr) {
+        console.error("Falha ao adicionar pontos (admin return):", pointsErr);
+      }
+    }
 
     return res.json(updated);
   } catch (err) {

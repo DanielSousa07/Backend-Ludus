@@ -1,12 +1,13 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
+import { addUserPoints } from "../services/engagement.service";
 
 export const rentalRoutes = Router();
 
 rentalRoutes.post("/", ensureAuthenticated, async (req, res) => {
   const userId = req.user.id;
-  const { gameId, copyId, endDate, rentOriginal } = req.body;
+  const { gameId, copyId, endDate } = req.body;
 
   if (!gameId) return res.status(400).json({ error: "gameId é obrigatório" });
   if (!endDate) return res.status(400).json({ error: "endDate é obrigatório" });
@@ -28,12 +29,14 @@ rentalRoutes.post("/", ensureAuthenticated, async (req, res) => {
 
       
       if (!copyId && game.allowOriginalRental === false) {
-        
         const copiesCount = await tx.gameCopy.count({ where: { gameId: game.id } });
         if (copiesCount > 0) {
           return {
             status: 409,
-            body: { error: "Este jogo só pode ser alugado por exemplar.", code: "ONLY_COPIES_ALLOWED" },
+            body: {
+              error: "Este jogo só pode ser alugado por exemplar.",
+              code: "ONLY_COPIES_ALLOWED",
+            },
           } as const;
         }
       }
@@ -43,14 +46,19 @@ rentalRoutes.post("/", ensureAuthenticated, async (req, res) => {
         const copy = await tx.gameCopy.findUnique({ where: { id: String(copyId) } });
 
         if (!copy || copy.gameId !== game.id) {
-          return { status: 404, body: { error: "Exemplar não encontrado para este jogo" } } as const;
+          return {
+            status: 404,
+            body: { error: "Exemplar não encontrado para este jogo" },
+          } as const;
         }
 
         if (!copy.available) {
-          return { status: 409, body: { error: "Exemplar indisponível", code: "COPY_UNAVAILABLE" } } as const;
+          return {
+            status: 409,
+            body: { error: "Exemplar indisponível", code: "COPY_UNAVAILABLE" },
+          } as const;
         }
 
-        
         await tx.gameCopy.update({
           where: { id: copy.id },
           data: { available: false },
@@ -71,10 +79,12 @@ rentalRoutes.post("/", ensureAuthenticated, async (req, res) => {
 
       
       if (!game.available) {
-        return { status: 409, body: { error: "Jogo indisponível", code: "GAME_UNAVAILABLE" } } as const;
+        return {
+          status: 409,
+          body: { error: "Jogo indisponível", code: "GAME_UNAVAILABLE" },
+        } as const;
       }
 
-      
       await tx.game.update({
         where: { id: game.id },
         data: { available: false },
@@ -93,13 +103,26 @@ rentalRoutes.post("/", ensureAuthenticated, async (req, res) => {
       return { status: 201, body: rental } as const;
     });
 
+    
+    if (result.status === 201 && result.body?.id) {
+      try {
+        await addUserPoints({
+          userId,
+          delta: 10,
+          reason: `RENTAL_CREATED:${result.body.id}`,
+        });
+      } catch (pointsErr) {
+        
+        console.error("Falha ao adicionar pontos (create rental):", pointsErr);
+      }
+    }
+
     return res.status(result.status).json(result.body);
   } catch (err) {
     console.error("Erro ao criar aluguel:", err);
     return res.status(500).json({ error: "Erro ao criar aluguel" });
   }
 });
-
 
 rentalRoutes.get("/me", ensureAuthenticated, async (req, res) => {
   try {
@@ -120,37 +143,3 @@ rentalRoutes.get("/me", ensureAuthenticated, async (req, res) => {
 });
 
 
-rentalRoutes.patch("/:id/return", ensureAuthenticated, async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const rental = await prisma.rental.findUnique({ where: { id: String(id) } });
-    if (!rental) return res.status(404).json({ error: "Aluguel não encontrado" });
-
-    
-    if (rental.userId !== req.user.id) {
-      return res.status(403).json({ error: "Sem permissão" });
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      
-      if (rental.copyId) {
-        await tx.gameCopy.update({ where: { id: rental.copyId }, data: { available: true } });
-      } else {
-        await tx.game.update({ where: { id: rental.gameId }, data: { available: true } });
-      }
-
-      const updated = await tx.rental.update({
-        where: { id: rental.id },
-        data: { status: "RETURNED" },
-      });
-
-      return updated;
-    });
-
-    return res.json(result);
-  } catch (err) {
-    console.error("Erro ao devolver aluguel:", err);
-    return res.status(500).json({ error: "Erro ao devolver aluguel" });
-  }
-});
