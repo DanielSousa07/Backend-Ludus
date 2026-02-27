@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
+import { ensureUserOnly } from "../middlewares/ensureUserOnly";
 import { addUserPoints } from "../services/engagement.service";
 
 export const rentalRoutes = Router();
 
-rentalRoutes.post("/", ensureAuthenticated, async (req, res) => {
+rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => {
   const userId = req.user.id;
   const { gameId, copyId, endDate } = req.body;
 

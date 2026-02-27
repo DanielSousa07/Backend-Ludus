@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma"; //
 import { getLudopediaGameDetails } from "../services/ludopedia.service";
 import { error } from "node:console";
 import { addUserPoints } from "../services/engagement.service";
+import { ensureUserOnly } from "../middlewares/ensureUserOnly";
 
 const gameRoutes = Router();
 
@@ -312,7 +313,7 @@ gameRoutes.get("/:id", ensureAuthenticated, async (req, res) => {
     }
 });
 
-gameRoutes.post("/:id/rating", ensureAuthenticated, async (req, res) => {
+gameRoutes.post("/:id/rating", ensureAuthenticated, ensureUserOnly, async (req, res) => {
   const { id } = req.params;
   const value = Number(req.body?.value);
 
@@ -320,62 +321,69 @@ gameRoutes.post("/:id/rating", ensureAuthenticated, async (req, res) => {
     return res.status(400).json({ error: "value deve ser de 1 a 5" });
   }
 
-  try {
-    const game = await prisma.game.findUnique({ where: { id } });
-    if (!game) return res.status(404).json({ error: "Jogo não encontrado" });
-
-
-    const existed = await prisma.gameRating.findUnique({
-      where: { userId_gameId: { userId: req.user.id, gameId: id } },
-      select: { id: true },
-    });
-
-    await prisma.gameRating.upsert({
-      where: { userId_gameId: { userId: req.user.id, gameId: id } },
-      create: { userId: req.user.id, gameId: id, value },
-      update: { value },
-    });
-
-
-    const agg = await prisma.gameRating.aggregate({
-      where: { gameId: id },
-      _avg: { value: true },
-      _count: { value: true },
-    });
-
-    const avg = Number(agg._avg.value ?? 0);
-    const count = Number(agg._count.value ?? 0);
-
-    await prisma.game.update({
-      where: { id },
-      data: { rating: avg, ratingsCount: count },
-    });
-
-
-    if (!existed) {
-      try {
-        await addUserPoints({
-          userId: req.user.id,
-          delta: 3,
-          reason: `RATING_CREATED:${id}`,
-        });
-      } catch (pointsErr) {
-        
-        console.error("Falha ao adicionar pontos (rating):", pointsErr);
-      }
-    }
-
-    return res.json({
-      ok: true,
-      avgRating: avg,
-      ratingsCount: count,
-      myRating: value,
-      pointsAwarded: existed ? 0 : 3,
-    });
-  } catch (err) {
-    console.error("Erro ao avaliar jogo:", err);
-    return res.status(500).json({ error: "Erro ao avaliar jogo" });
+  const game = await prisma.game.findUnique({ where: { id } });
+  if (!game) {
+    return res.status(404).json({ error: "Jogo não encontrado" });
   }
+
+  const hasReturnedRental = await prisma.rental.findFirst({
+    where: {
+      userId: req.user.id,
+      gameId: id,
+      status: "RETURNED",
+    },
+  });
+
+  if (!hasReturnedRental) {
+    return res.status(403).json({
+      error: "Você só pode avaliar jogos que já alugou e devolveu.",
+      code: "CANNOT_RATE",
+    });
+  }
+
+  
+  await prisma.gameRating.upsert({
+    where: {
+      userId_gameId: { userId: req.user.id, gameId: id },
+    },
+    create: { userId: req.user.id, gameId: id, value },
+    update: { value },
+  });
+
+  const agg = await prisma.gameRating.aggregate({
+    where: { gameId: id },
+    _avg: { value: true },
+    _count: { value: true },
+  });
+
+  const avg = Number(agg._avg.value ?? 0);
+  const count = Number(agg._count.value ?? 0);
+
+  await prisma.game.update({
+    where: { id },
+    data: { rating: avg, ratingsCount: count },
+  });
+
+  return res.json({
+    ok: true,
+    avgRating: avg,
+    ratingsCount: count,
+    myRating: value,
+  });
 });
 
+gameRoutes.get("/:id/can-rate", ensureAuthenticated, async (req, res) => {
+  const { id } = req.params;
+
+  const rental = await prisma.rental.findFirst({
+    where: {
+      userId: req.user.id,
+      gameId: id,
+      status: "RETURNED",
+    },
+    select: { id: true },
+  });
+
+  return res.json({ canRate: !!rental });
+});
 export { gameRoutes };

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
 import { prisma } from "../lib/prisma";
+import { ensureUserOnly } from "../middlewares/ensureUserOnly";
 
 const favoritesRoutes = Router();
 
@@ -28,7 +29,7 @@ favoritesRoutes.get("/", async (req, res) => {
 });
 
 
-favoritesRoutes.post("/:gameId", async (req, res) => {
+favoritesRoutes.post("/:gameId", ensureAuthenticated, ensureUserOnly, async (req, res) => {
   const { gameId } = req.params;
 
   try {
@@ -48,7 +49,7 @@ favoritesRoutes.post("/:gameId", async (req, res) => {
   }
 });
 
-favoritesRoutes.delete("/:gameId", async (req, res) => {
+favoritesRoutes.delete("/:gameId", ensureAuthenticated, ensureUserOnly,  async (req, res) => {
   const { gameId } = req.params;
 
   await prisma.favorite.deleteMany({
