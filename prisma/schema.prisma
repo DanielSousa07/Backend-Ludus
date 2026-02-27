@@ -44,6 +44,7 @@ model User {
   rentals     Rental[]
   ratings     GameRating[]
   pointsLogs  UserPointsLog[]
+  favorites Favorite[] 
 }
 
 model Game {
@@ -71,6 +72,21 @@ model Game {
   rentals Rental[]
   ratings GameRating[]
   copies GameCopy[]
+  favorites Favorite[]
+}
+
+model Favorite {
+  id     String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  gameId String
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, gameId])
 }
 
 model UserPointsLog {

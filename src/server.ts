@@ -8,7 +8,7 @@ import { gameCopyRoutes } from "./routes/gameCopy.routes";
 import { rentalRoutes } from "./routes/rental.routes";
 import { adminRentalRoutes } from "./routes/adminRental.routes";
 import { engagementRoutes } from "./routes/engagement.routes";
-
+import { favoritesRoutes } from "./routes/favorites.routes";
 
 const app = express();
 
@@ -21,6 +21,7 @@ app.use("/auth", authRoutes);
 app.use("/games", gameRoutes)
 app.use("/games", gameCopyRoutes)
 
+app.use("/favorites", favoritesRoutes);
 app.use("/rentals", rentalRoutes);
 app.use("/admin/rentals", adminRentalRoutes);
 app.use("/engagement", engagementRoutes);
