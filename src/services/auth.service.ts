@@ -118,20 +118,20 @@ export async function loginWithGoogle(idToken: string) {
     { subject: user.id, expiresIn: "7d" }
   );
 
-  return {
-    token,
-    user: {
-      id: user.id,
-      nome: user.name, 
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      emailVerified: user.emailVerified,
-      phoneVerified: user.phoneVerified,
-      points: user.points,
-      level: user.level,
-      authProvider: user.authProvider,
-    },
-    needsPhoneVerification: !user.phone || !user.phoneVerified,
-  };
+ return {
+  token,
+  user: {
+    id: user.id,
+    nome: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    emailVerified: user.emailVerified,
+    phoneVerified: user.phoneVerified,
+    points: user.points,
+    level: user.level,
+    authProvider: user.authProvider,
+  },
+  needsPhoneVerification: !!user.phone && !user.phoneVerified,
+};
 }

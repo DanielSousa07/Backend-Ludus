@@ -6,20 +6,45 @@ import { addUserPoints } from "../services/engagement.service";
 
 export const rentalRoutes = Router();
 
+
+const RENTAL_DAYS = 3;
+
+
+function addDays(date: Date, days: number) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
 rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => {
   const userId = req.user.id;
-  const { gameId, copyId, endDate } = req.body;
+  const { gameId, copyId } = req.body;
 
   if (!gameId) return res.status(400).json({ error: "gameId é obrigatório" });
-  if (!endDate) return res.status(400).json({ error: "endDate é obrigatório" });
 
-  const parsedEnd = new Date(endDate);
-  if (Number.isNaN(parsedEnd.getTime())) {
-    return res.status(400).json({ error: "endDate inválido" });
-  }
+  
+  const endDate = addDays(new Date(), RENTAL_DAYS);
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      
+      const activeCount = await tx.rental.count({
+        where: {
+          userId,
+          status: { in: ["PENDING", "ACTIVE"] }, 
+        },
+      });
+
+      if (activeCount >= 2) {
+        return {
+          status: 409,
+          body: {
+            error: "Você já possui 2 aluguéis em aberto. Finalize um para alugar outro.",
+            code: "RENTAL_LIMIT_REACHED",
+          },
+        } as const;
+      }
+
       const game = await tx.game.findUnique({
         where: { id: String(gameId) },
       });
@@ -42,7 +67,7 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
         }
       }
 
-      
+    
       if (copyId) {
         const copy = await tx.gameCopy.findUnique({ where: { id: String(copyId) } });
 
@@ -60,6 +85,7 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
           } as const;
         }
 
+      
         await tx.gameCopy.update({
           where: { id: copy.id },
           data: { available: false },
@@ -70,12 +96,15 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
             userId,
             gameId: game.id,
             copyId: copy.id,
-            endDate: parsedEnd,
+            endDate,
             status: "PENDING",
           },
         });
 
-        return { status: 201, body: rental } as const;
+        return {
+          status: 201,
+          body: { ...rental, rentalDays: RENTAL_DAYS },
+        } as const;
       }
 
       
@@ -96,24 +125,26 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
           userId,
           gameId: game.id,
           copyId: null,
-          endDate: parsedEnd,
+          endDate,
           status: "PENDING",
         },
       });
 
-      return { status: 201, body: rental } as const;
+      return {
+        status: 201,
+        body: { ...rental, rentalDays: RENTAL_DAYS },
+      } as const;
     });
 
     
-    if (result.status === 201 && result.body?.id) {
+    if (result.status === 201 && (result.body as any)?.id) {
       try {
         await addUserPoints({
           userId,
           delta: 10,
-          reason: `RENTAL_CREATED:${result.body.id}`,
+          reason: `RENTAL_CREATED:${(result.body as any).id}`,
         });
       } catch (pointsErr) {
-        
         console.error("Falha ao adicionar pontos (create rental):", pointsErr);
       }
     }
@@ -142,5 +173,3 @@ rentalRoutes.get("/me", ensureAuthenticated, async (req, res) => {
     return res.status(500).json({ error: "Erro ao listar aluguéis" });
   }
 });
-
-
