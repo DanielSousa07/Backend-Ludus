@@ -1,3 +1,4 @@
+
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -9,8 +10,14 @@ import { rentalRoutes } from "./routes/rental.routes";
 import { adminRentalRoutes } from "./routes/adminRental.routes";
 import { engagementRoutes } from "./routes/engagement.routes";
 import { favoritesRoutes } from "./routes/favorites.routes";
+import { pushTokenRoutes } from "./routes/pushToken.routes";
+import { notificationRoutes } from "./routes/notification.routes";
+import { startRentalReminderJob } from "./jobs/rentalReminders";
+
 
 const app = express();
+
+startRentalReminderJob();
 
 app.use(cors());
 app.use(express.json());
@@ -25,6 +32,8 @@ app.use("/favorites", favoritesRoutes);
 app.use("/rentals", rentalRoutes);
 app.use("/admin/rentals", adminRentalRoutes);
 app.use("/engagement", engagementRoutes);
+app.use("/users", pushTokenRoutes);
+app.use("/notifications", notificationRoutes);
 
 app.get("/", (req, res) => {
     res.send("API Ludus rodando 🚀")

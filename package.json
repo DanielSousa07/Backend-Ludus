@@ -19,10 +19,12 @@
     "cors": "^2.8.5",
     "docker": "^1.0.0",
     "dotenv": "^17.2.3",
+    "expo-server-sdk": "^6.0.0",
     "express": "^5.2.1",
     "google-auth-library": "^10.5.0",
     "jsonwebtoken": "^9.0.3",
     "jwt-decode": "^4.0.0",
+    "node-cron": "^4.2.1",
     "resend": "^6.9.2",
     "twilio": "^5.12.1",
     "undefined": "@react-native-google-singin/google/singin"

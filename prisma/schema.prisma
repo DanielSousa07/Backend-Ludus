@@ -18,6 +18,7 @@ model User {
   email String  @unique
   phone String? @unique
 
+
   emailVerified         Boolean   @default(false)
   emailVerificationCode String?
   emailCodeExpiresAt    DateTime?
@@ -28,6 +29,7 @@ model User {
   codeExpiresAt    DateTime?
   lastCodeSentAt   DateTime?
 
+  
   points Int @default(0)
   level  Int @default(1)
 
@@ -35,16 +37,22 @@ model User {
   googleSub     String? @unique
   authProvider  AuthProvider @default(LOCAL)
 
+  
+  termsAcceptedAt DateTime?
+
   role      String @default("USER")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  games       Game[]
-  rentals     Rental[]
-  ratings     GameRating[]
-  pointsLogs  UserPointsLog[]
-  favorites Favorite[] 
+  
+  games         Game[]
+  rentals       Rental[]
+  ratings       GameRating[]
+  pointsLogs    UserPointsLog[]
+  favorites     Favorite[] 
+  pushTokens    PushToken[]
+  notifications Notification[]
 }
 
 model Game {
@@ -69,9 +77,9 @@ model Game {
   userId String
   owner  User   @relation(fields: [userId], references: [id])
 
-  rentals Rental[]
-  ratings GameRating[]
-  copies GameCopy[]
+  rentals   Rental[]
+  ratings   GameRating[]
+  copies    GameCopy[]
   favorites Favorite[]
 }
 
@@ -159,4 +167,55 @@ model Rental {
   @@index([gameId])
   @@index([copyId])
   @@index([userId])
+}
+
+
+
+model PushToken {
+  id            String   @id @default(cuid())
+  userId        String
+  expoPushToken String   @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum NotificationType {
+  RENTAL_CREATED
+  RENTAL_DUE_24H
+  RENTAL_DUE_TODAY
+  RENTAL_OVERDUE
+  RENTAL_RETURN_CONFIRMED
+  RATING_SAVED
+  FAVORITE_ADDED
+  FAVORITE_REMOVED
+  EMAIL_VERIFIED
+  PHONE_VERIFIED
+  VERIFY_REQUIRED
+  POINTS_EARNED
+  LEVEL_UP
+  SYSTEM_ANNOUNCEMENT
+  GAME_BACK_AVAILABLE
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  dedupeKey String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([dedupeKey])
 }

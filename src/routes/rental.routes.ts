@@ -3,6 +3,8 @@ import { prisma } from "../lib/prisma";
 import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
 import { ensureUserOnly } from "../middlewares/ensureUserOnly";
 import { addUserPoints } from "../services/engagement.service";
+import { notifyUser } from "../services/notify.service";
+
 
 export const rentalRoutes = Router();
 
@@ -16,22 +18,26 @@ function addDays(date: Date, days: number) {
   return d;
 }
 
+
+
 rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => {
   const userId = req.user.id;
   const { gameId, copyId } = req.body;
 
   if (!gameId) return res.status(400).json({ error: "gameId é obrigatório" });
 
-  
+
   const endDate = addDays(new Date(), RENTAL_DAYS);
+
+
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      
+
       const activeCount = await tx.rental.count({
         where: {
           userId,
-          status: { in: ["PENDING", "ACTIVE"] }, 
+          status: { in: ["PENDING", "ACTIVE"] },
         },
       });
 
@@ -53,7 +59,7 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
         return { status: 404, body: { error: "Jogo não encontrado" } } as const;
       }
 
-      
+
       if (!copyId && game.allowOriginalRental === false) {
         const copiesCount = await tx.gameCopy.count({ where: { gameId: game.id } });
         if (copiesCount > 0) {
@@ -67,7 +73,7 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
         }
       }
 
-    
+
       if (copyId) {
         const copy = await tx.gameCopy.findUnique({ where: { id: String(copyId) } });
 
@@ -85,7 +91,7 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
           } as const;
         }
 
-      
+
         await tx.gameCopy.update({
           where: { id: copy.id },
           data: { available: false },
@@ -107,7 +113,7 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
         } as const;
       }
 
-      
+
       if (!game.available) {
         return {
           status: 409,
@@ -136,17 +142,22 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
       } as const;
     });
 
-    
+
     if (result.status === 201 && (result.body as any)?.id) {
-      try {
-        await addUserPoints({
-          userId,
-          delta: 10,
-          reason: `RENTAL_CREATED:${(result.body as any).id}`,
-        });
-      } catch (pointsErr) {
-        console.error("Falha ao adicionar pontos (create rental):", pointsErr);
-      }
+      const rentalData = result.body as any;
+      const game = await prisma.game.findUnique({where: {id: String(gameId)}, select: {title: true}}
+    
+    )
+
+ await notifyUser({
+      userId,
+      type: "RENTAL_CREATED",
+      title: "Solicitação Realizada! 🎲",
+      body: `Seu aluguel do jogo "${game?.title || 'selecionado'}" está aguardando confirmação. Retire-o na Biblioteca IFMA - Campus Timon.`,
+      channelId: "rentals",
+      data: { route: "/rentals", rentalId: rentalData.id },
+    });
+
     }
 
     return res.status(result.status).json(result.body);
@@ -154,6 +165,8 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
     console.error("Erro ao criar aluguel:", err);
     return res.status(500).json({ error: "Erro ao criar aluguel" });
   }
+
+
 });
 
 rentalRoutes.get("/me", ensureAuthenticated, async (req, res) => {

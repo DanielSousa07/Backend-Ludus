@@ -4,6 +4,8 @@ import { prisma } from "../lib/prisma";
 import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
 import { ensureAdmin } from "../middlewares/ensureAdmin";
 import { addUserPoints } from "../services/engagement.service";
+import { notifyUser } from "../services/notify.service";
+import { NotificationType } from "@prisma/client";
 
 export const adminRentalRoutes = Router();
 
@@ -71,7 +73,11 @@ adminRentalRoutes.patch("/:id/status", ensureAuthenticated, ensureAdmin, async (
   }
 
   try {
-    const rental = await prisma.rental.findUnique({ where: { id: String(id) } });
+    const rental = await prisma.rental.findUnique({ 
+    where: { id: String(id) },
+    include: { game: { select: { title: true } }, user: { select: { name: true } } }
+  });
+
     if (!rental) return res.status(404).json({ error: "Aluguel não encontrado" });
 
     const FINALIZED: RentalStatus[] = [RentalStatus.RETURNED, RentalStatus.CANCELED];
@@ -95,24 +101,68 @@ adminRentalRoutes.patch("/:id/status", ensureAuthenticated, ensureAdmin, async (
         }
       }
 
+
       return tx.rental.update({
         where: { id: rental.id },
         data: { status },
       });
     });
 
-    if (status === RentalStatus.RETURNED) {
-      try {
-        await addUserPoints({
-          userId: updated.userId,
-          delta: 5,
-          reason: `ADMIN_RENTAL_RETURNED:${updated.id}`,
-        });
-      } catch (pointsErr) {
-        console.error("Falha ao adicionar pontos (admin return):", pointsErr);
-      }
-    }
+    if (status === RentalStatus.ACTIVE) {
+    try {
+    
+    await addUserPoints({
+      userId: updated.userId,
+      delta: 7,
+      reason: `RENTAL_CONFIRMED_BY_ADMIN:${updated.id}`,
+    });
 
+  
+    await notifyUser({
+      userId: updated.userId,
+      type: "RENTAL_CREATED", 
+      title: "Aluguel Confirmado! ✅",
+      body: `Sua retirada de "${rental.game.title}" foi confirmada. O prazo de devolução é até ${updated.endDate.toLocaleDateString('pt-BR')}.`,
+      channelId: "rentals",
+      data: { route: "/rentals", rentalId: updated.id },
+    });
+  } catch (err) {
+    console.error("Erro ao processar pontos ou notificação de confirmação:", err);
+  }
+  }
+
+ if (status === RentalStatus.RETURNED) {
+  try {
+    
+    const isOverdue = new Date() > rental.endDate;
+    
+    
+    const pointsDelta = isOverdue ? -5 : 5;
+    const reasonPrefix = isOverdue ? "RENTAL_RETURNED_LATE" : "RENTAL_RETURNED_ON_TIME";
+
+    
+    await addUserPoints({
+      userId: updated.userId,
+      delta: pointsDelta,
+      reason: `${reasonPrefix}:${updated.id}`,
+    });
+
+    
+    await notifyUser({
+      userId: updated.userId,
+      type: "RENTAL_RETURN_CONFIRMED",
+      title: isOverdue ? "Jogo Devolvido 📥" : "Parabéns pela Devolução! 🏆",
+      body: isOverdue 
+        ? `Você devolveu "${rental.game.title}". Tente cumprir o prazo na próxima vez para manter seus pontos altos e evitar suspensões.`
+        : `Obrigado por devolver "${rental.game.title}" no prazo! Você ganhou ${pointsDelta} pontos e está mais perto do próximo nível.`,
+      channelId: "rentals",
+      data: { route: "/rentals" },
+    });
+
+  } catch (err) {
+    console.error("Erro ao processar pontos ou notificação de devolução:", err);
+  }
+}
     return res.json(updated);
   } catch (err) {
     console.error("Erro ao atualizar status (admin):", err);
