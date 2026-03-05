@@ -6,6 +6,7 @@ import { ensureAdmin } from "../middlewares/ensureAdmin";
 import { addUserPoints } from "../services/engagement.service";
 import { notifyUser } from "../services/notify.service";
 import { NotificationType } from "@prisma/client";
+import { notifyGameBackAvailable } from "../services/gameAvailability.service";
 
 export const adminRentalRoutes = Router();
 
@@ -100,14 +101,20 @@ adminRentalRoutes.patch("/:id/status", ensureAuthenticated, ensureAdmin, async (
           });
         }
       }
-
-
+      
+      
       return tx.rental.update({
         where: { id: rental.id },
         data: { status },
       });
     });
-
+    
+    if (status === RentalStatus.RETURNED || status === RentalStatus.CANCELED) {
+      notifyGameBackAvailable(updated.gameId).catch(err => 
+        console.error("Erro ao notificar disponibilidade:", err)
+      );
+    }
+    
     if (status === RentalStatus.ACTIVE) {
     try {
     

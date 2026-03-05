@@ -13,6 +13,7 @@ import { favoritesRoutes } from "./routes/favorites.routes";
 import { pushTokenRoutes } from "./routes/pushToken.routes";
 import { notificationRoutes } from "./routes/notification.routes";
 import { startRentalReminderJob } from "./jobs/rentalReminders";
+import { gameWatchRoutes } from "./routes/gameWatch.routes";
 
 
 const app = express();
@@ -34,6 +35,7 @@ app.use("/admin/rentals", adminRentalRoutes);
 app.use("/engagement", engagementRoutes);
 app.use("/users", pushTokenRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/games", gameWatchRoutes);
 
 app.get("/", (req, res) => {
     res.send("API Ludus rodando 🚀")

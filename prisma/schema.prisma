@@ -18,7 +18,6 @@ model User {
   email String  @unique
   phone String? @unique
 
-
   emailVerified         Boolean   @default(false)
   emailVerificationCode String?
   emailCodeExpiresAt    DateTime?
@@ -29,50 +28,51 @@ model User {
   codeExpiresAt    DateTime?
   lastCodeSentAt   DateTime?
 
-  
   points Int @default(0)
   level  Int @default(1)
 
-  senhaHash     String?
-  googleSub     String? @unique
-  authProvider  AuthProvider @default(LOCAL)
+  senhaHash    String?
+  googleSub    String?      @unique
+  authProvider AuthProvider @default(LOCAL)
 
-  
   termsAcceptedAt DateTime?
 
-  role      String @default("USER")
+  role String @default("USER")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  
   games         Game[]
   rentals       Rental[]
   ratings       GameRating[]
   pointsLogs    UserPointsLog[]
-  favorites     Favorite[] 
+  favorites     Favorite[]
   pushTokens    PushToken[]
   notifications Notification[]
+
+  gameAvailabilityWatches GameAvailabilityWatch[]
 }
 
 model Game {
-  id          String  @id @default(uuid())
-  ludopediaId Int?
-  title       String
-  description String?
-  price       Float
-  available   Boolean @default(true)
-  cover       String?
+  id                  String  @id @default(uuid())
+  ludopediaId         Int?
+  title               String
+  description         String?
+  price               Float
+  available           Boolean @default(true)
+  cover               String?
   allowOriginalRental Boolean @default(true)
 
   rating       Float @default(0)
   ratingsCount Int?
+  howToPlayUrl String? @db.Text
 
-  minPlayers Int  @default(1)
+  minPlayers Int             @default(1)
   maxPlayers Int?
-  minAge     Int  @default(0)
-  minTime    Int  @default(0)
+  minAge     Int             @default(0)
+  minTime    Int             @default(0)
   maxTime    Int?
+  components GameComponent[]
 
   userId String
   owner  User   @relation(fields: [userId], references: [id])
@@ -81,10 +81,23 @@ model Game {
   ratings   GameRating[]
   copies    GameCopy[]
   favorites Favorite[]
+
+  gameAvailabilityWatches GameAvailabilityWatch[]
+}
+
+model GameComponent {
+  id       String @id @default(uuid())
+  gameId   String
+  name     String
+  quantity Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
 }
 
 model Favorite {
-  id     String @id @default(uuid())
+  id String @id @default(uuid())
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -104,23 +117,23 @@ model UserPointsLog {
   reason    String
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
 }
 
 model GameCopy {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   number    Int
   code      String?
   condition String?
-  available Boolean  @default(true)
+  available Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   gameId String
-  game   Game @relation(fields: [gameId], references: [id])
+  game   Game   @relation(fields: [gameId], references: [id])
 
   rentals Rental[]
 
@@ -128,18 +141,32 @@ model GameCopy {
 }
 
 model GameRating {
-  id       String   @id @default(uuid())
-  value    Int
+  id        String   @id @default(uuid())
+  value     Int
   createdAt DateTime @default(now())
-  updateAt DateTime @updatedAt
+  updateAt  DateTime @updatedAt
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   gameId String
-  game   Game  @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
   @@unique([userId, gameId])
+}
+
+model GameAvailabilityWatch {
+  id        String   @id @default(cuid())
+  userId    String
+  gameId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+  @@index([gameId])
+  @@index([userId])
 }
 
 enum RentalStatus {
@@ -168,8 +195,6 @@ model Rental {
   @@index([copyId])
   @@index([userId])
 }
-
-
 
 model PushToken {
   id            String   @id @default(cuid())

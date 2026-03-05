@@ -4,7 +4,6 @@ import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
 
 export const pushTokenRoutes = Router();
 
-// POST /users/me/push-token
 pushTokenRoutes.post("/me/push-token", ensureAuthenticated, async (req, res) => {
   const { expoPushToken } = req.body;
 
@@ -13,7 +12,7 @@ pushTokenRoutes.post("/me/push-token", ensureAuthenticated, async (req, res) => 
   }
 
   try {
-    // Upsert: Se o token já existir para outro usuário, ele atualiza para o atual
+    
     await prisma.pushToken.upsert({
       where: { expoPushToken },
       update: { userId: req.user.id },
