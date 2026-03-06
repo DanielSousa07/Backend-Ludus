@@ -9,12 +9,18 @@ interface IPayload {
 
 export async function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: "Token não enviado" });
+  if (!authHeader) {
+    return res.status(401).json({ error: "Token não enviado" });
+  }
 
   const [, token] = authHeader.split(" ");
 
   try {
-    const decoded = verify(token, process.env.JWT_SECRET || "secret_fallback") as IPayload;
+    const decoded = verify(
+      token,
+      process.env.JWT_SECRET || "secret_fallback"
+    ) as IPayload;
+
     const userId = decoded.sub;
 
     const user = await prisma.user.findUnique({
@@ -29,21 +35,18 @@ export async function ensureAuthenticated(req: Request, res: Response, next: Nex
       },
     });
 
-    if (!user) return res.status(401).json({ error: "Utilizador não encontrado" });
-
-    
-    if (user.email && !user.emailVerified) {
-      return res.status(403).json({
-        error: "Sua conta precisa ser verificada por e-mail.",
-        code: "EMAIL_NOT_VERIFIED",
-      });
+    if (!user) {
+      return res.status(401).json({ error: "Utilizador não encontrado" });
     }
 
+    const hasVerifiedEmail = !!user.email && !!user.emailVerified;
+    const hasVerifiedPhone = !!user.phone && !!user.phoneVerified;
+
     
-    if (user.phone && !user.phoneVerified) {
+    if (!hasVerifiedEmail && !hasVerifiedPhone) {
       return res.status(403).json({
-        error: "Sua conta precisa ser verificada por telefone.",
-        code: "PHONE_NOT_VERIFIED",
+        error: "Sua conta precisa ser verificada por e-mail ou telefone.",
+        code: "ACCOUNT_NOT_VERIFIED",
       });
     }
 

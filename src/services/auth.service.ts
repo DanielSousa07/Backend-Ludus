@@ -41,21 +41,22 @@ export async function login(emailOrPhone: string, senha: string) {
     { subject: user.id, expiresIn: "7d" }
   );
 
-  return {
-    token,
-    user: {
-      id: user.id,
-      nome: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      emailVerified: user.emailVerified,
-      phoneVerified: user.phoneVerified,
-      points: user.points,
-      level: user.level,
-      authProvider: user.authProvider,
-    },
-  };
+ return {
+  token,
+  user: {
+    id: user.id,
+    nome: user.name,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    emailVerified: user.emailVerified,
+    phoneVerified: user.phoneVerified,
+    points: user.points,
+    level: user.level,
+    authProvider: user.authProvider,
+  },
+};
 }
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_WEB_CLIENT_ID);
@@ -118,11 +119,12 @@ export async function loginWithGoogle(idToken: string) {
     { subject: user.id, expiresIn: "7d" }
   );
 
- return {
+return {
   token,
   user: {
     id: user.id,
     nome: user.name,
+    name: user.name,
     email: user.email,
     phone: user.phone,
     role: user.role,
