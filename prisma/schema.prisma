@@ -28,6 +28,10 @@ model User {
   codeExpiresAt    DateTime?
   lastCodeSentAt   DateTime?
 
+  avatar String?
+  picture String?
+  
+
   points Int @default(0)
   level  Int @default(1)
 

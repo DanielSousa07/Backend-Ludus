@@ -1,9 +1,9 @@
-
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import path from "path";
 import { prisma } from './lib/prisma';
-import authRoutes from "./routes/auth.routes"; 
+import authRoutes from "./routes/auth.routes";
 import { gameRoutes } from "./routes/game.routes";
 import { gameCopyRoutes } from "./routes/gameCopy.routes";
 import { rentalRoutes } from "./routes/rental.routes";
@@ -14,7 +14,7 @@ import { pushTokenRoutes } from "./routes/pushToken.routes";
 import { notificationRoutes } from "./routes/notification.routes";
 import { startRentalReminderJob } from "./jobs/rentalReminders";
 import { gameWatchRoutes } from "./routes/gameWatch.routes";
-
+import { userProfileRoutes } from "./routes/userProfile.routes";
 
 const app = express();
 
@@ -24,28 +24,31 @@ app.use(cors());
 app.use(express.json());
 
 
-app.use("/auth", authRoutes); 
+app.use("/uploads", express.static(path.resolve(__dirname, "../uploads")));
 
-app.use("/games", gameRoutes)
-app.use("/games", gameCopyRoutes)
+app.use("/auth", authRoutes);
+
+app.use("/games", gameRoutes);
+app.use("/games", gameCopyRoutes);
+app.use("/games", gameWatchRoutes);
 
 app.use("/favorites", favoritesRoutes);
 app.use("/rentals", rentalRoutes);
 app.use("/admin/rentals", adminRentalRoutes);
 app.use("/engagement", engagementRoutes);
 app.use("/users", pushTokenRoutes);
+app.use("/users", userProfileRoutes);
 app.use("/notifications", notificationRoutes);
-app.use("/games", gameWatchRoutes);
 
-app.get("/", (req, res) => {
-    res.send("API Ludus rodando 🚀")
+app.get("/", (_req, res) => {
+  res.send("API Ludus rodando 🚀");
 });
 
-app.get("/users", async (req, res) => {
-    const users = await prisma.user.findMany();
-    res.json(users);
+app.get("/users", async (_req, res) => {
+  const users = await prisma.user.findMany();
+  res.json(users);
 });
 
 app.listen(3000, "0.0.0.0", () => {
-    console.log("Servidor rodando em http://0.0.0.0:3000")
-})
+  console.log("Servidor rodando em http://0.0.0.0:3000");
+});

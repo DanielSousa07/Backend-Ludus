@@ -41,7 +41,7 @@ export async function login(emailOrPhone: string, senha: string) {
     { subject: user.id, expiresIn: "7d" }
   );
 
- return {
+return {
   token,
   user: {
     id: user.id,
@@ -55,6 +55,8 @@ export async function login(emailOrPhone: string, senha: string) {
     points: user.points,
     level: user.level,
     authProvider: user.authProvider,
+    avatar: user.avatar,
+    picture: user.picture,
   },
 };
 }
@@ -83,6 +85,7 @@ export async function loginWithGoogle(idToken: string) {
   const name = payload.name ?? "Usuário";
   const googleSub = payload.sub;
   const emailVerified = payload.email_verified ?? true;
+  const picture = payload.picture ?? null;
 
   let user = await prisma.user.findUnique({ where: { email } });
 
@@ -91,9 +94,10 @@ export async function loginWithGoogle(idToken: string) {
     data: {
       name,
       email,
-      emailVerified: true,        
-      phone: null,                
-      phoneVerified: false,       
+      picture,
+      emailVerified: true,
+      phone: null,
+      phoneVerified: false,
       googleSub,
       authProvider: "GOOGLE",
       senhaHash: null,
@@ -102,13 +106,13 @@ export async function loginWithGoogle(idToken: string) {
     },
   });
 } else {
-  
   user = await prisma.user.update({
     where: { id: user.id },
     data: {
       googleSub: user.googleSub ?? googleSub,
       authProvider: "GOOGLE",
       emailVerified: true,
+      picture: user.picture ?? picture,
     },
   });
 }
@@ -133,6 +137,8 @@ return {
     points: user.points,
     level: user.level,
     authProvider: user.authProvider,
+    avatar: user.avatar,
+    picture: user.picture,
   },
   needsPhoneVerification: !!user.phone && !user.phoneVerified,
 };
