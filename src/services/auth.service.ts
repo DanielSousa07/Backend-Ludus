@@ -22,13 +22,13 @@ export async function login(emailOrPhone: string, senha: string) {
   }
 
   
+if (!user.senhaHash) {
   if (user.authProvider === "GOOGLE") {
-    throw new Error("Essa conta usa login com Google. Entre com Google.");
+    throw new Error("Essa conta usa login com Google. Entre com Google ou crie uma senha local.");
   }
 
-  if (!user.senhaHash) {
-    throw new Error("Usuário ou senha inválidos");
-  }
+  throw new Error("Usuário ou senha inválidos");
+}
 
   const senhaValida = await bcrypt.compare(senha, user.senhaHash);
   if (!senhaValida) {
