@@ -17,7 +17,7 @@
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",
     "cors": "^2.8.5",
-    "docker": "^0.2.14",
+    "docker": "^1.0.0",
     "dotenv": "^17.2.3",
     "expo-server-sdk": "^6.0.0",
     "express": "^5.2.1",

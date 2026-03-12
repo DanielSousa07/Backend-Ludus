@@ -74,6 +74,7 @@ router.post("/google", async (req, res) => {
   }
 });
 
+
 router.post("/register", async (req, res) => {
   const { name, email, phone, senha } = req.body;
 
