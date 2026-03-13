@@ -76,23 +76,47 @@ router.post("/google", async (req, res) => {
 
 
 router.post("/register", async (req, res) => {
-  const { name, email, phone, senha } = req.body;
+  const { name, email, phone, senha, acceptedTerms, acceptedPrivacy } = req.body;
 
   try {
     const cleanName = (name || "").trim();
     const cleanEmail = (email || "").trim().toLowerCase();
     const cleanPhone = phone ? cleanDigits(phone) : null;
 
-    if (!cleanName) return res.status(400).json({ error: "Nome é obrigatório." });
-    if (!cleanEmail) return res.status(400).json({ error: "E-mail é obrigatório." });
-    if (!senha) return res.status(400).json({ error: "Senha é obrigatória." });
+    if (!cleanName) {
+      return res.status(400).json({ error: "Nome é obrigatório." });
+    }
 
-    const emailExists = await prisma.user.findUnique({ where: { email: cleanEmail } });
-    if (emailExists) return res.status(400).json({ error: "Este e-mail já está em uso." });
+    if (!cleanEmail) {
+      return res.status(400).json({ error: "E-mail é obrigatório." });
+    }
+
+    if (!senha) {
+      return res.status(400).json({ error: "Senha é obrigatória." });
+    }
+
+    const emailExists = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    if (emailExists) {
+      return res.status(400).json({ error: "Este e-mail já está em uso." });
+    }
 
     if (cleanPhone) {
-      const phoneExists = await prisma.user.findUnique({ where: { phone: cleanPhone } });
-      if (phoneExists) return res.status(400).json({ error: "Telefone já cadastrado." });
+      const phoneExists = await prisma.user.findUnique({
+        where: { phone: cleanPhone },
+      });
+
+      if (phoneExists) {
+        return res.status(400).json({ error: "Telefone já cadastrado." });
+      }
+    }
+
+    if (!acceptedTerms || !acceptedPrivacy) {
+      return res.status(400).json({
+        error: "Você precisa aceitar os Termos de Uso e a Política de Privacidade.",
+      });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -109,14 +133,15 @@ router.post("/register", async (req, res) => {
         phone: cleanPhone,
         senhaHash: hash,
 
-        
         emailVerified: false,
         emailVerificationCode: emailCode,
         emailCodeExpiresAt: emailExpiresAt,
         lastEmailSentAt: now,
 
-        
         phoneVerified: false,
+
+        termsAcceptedAt: acceptedTerms ? new Date() : null,
+        privacyAcceptedAt: acceptedPrivacy ? new Date() : null,
       },
       select: {
         id: true,
@@ -126,6 +151,8 @@ router.post("/register", async (req, res) => {
         emailVerified: true,
         phoneVerified: true,
         createdAt: true,
+        termsAcceptedAt: true,
+        privacyAcceptedAt: true,
       },
     });
 
@@ -148,7 +175,6 @@ router.post("/register", async (req, res) => {
       });
     } catch (e) {
       console.log("Falha ao enviar e-mail (Resend):", e);
-    
     }
 
     return res.status(201).json({
@@ -160,7 +186,6 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ error: "Erro ao criar usuário" });
   }
 });
-
 
 router.post("/verify-email", async (req, res) => {
   const { email, code } = req.body;
