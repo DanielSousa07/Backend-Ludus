@@ -4,6 +4,8 @@ import { ensureAdmin } from "../middlewares/ensureAdmin";
 import { ensureUserOnly } from "../middlewares/ensureUserOnly";
 import { prisma } from "../lib/prisma";
 import { searchLudopedia, getLudopediaGameDetails } from "../services/ludopedia.service";
+import { searchBGG, getBGGDetails } from "../services/bgg.services";
+import { translateToPT } from "../services/translate.service";
 
 const gameRoutes = Router();
 
@@ -52,7 +54,7 @@ gameRoutes.get("/", async (req, res) => {
 
       const availableCondition = {
         OR: [
-          
+
           { copies: { some: { available: true } } },
 
 
@@ -70,7 +72,7 @@ gameRoutes.get("/", async (req, res) => {
         ],
       };
 
-  
+
       if (where.OR) {
         where.AND = [...(where.AND ?? []), availableCondition];
       } else {
@@ -80,9 +82,9 @@ gameRoutes.get("/", async (req, res) => {
 
       const unavailableCondition = {
         AND: [
-          
+
           { copies: { none: { available: true } } },
-          
+
           {
             OR: [
               { available: false },
@@ -113,7 +115,7 @@ gameRoutes.get("/", async (req, res) => {
     if (!isNaN(time)) where.maxTime = { lte: time };
   }
 
-  
+
   if (players && String(players) !== "null") {
     const p = Number(players);
     if (!isNaN(p)) where.maxPlayers = { lte: p };
@@ -190,26 +192,100 @@ gameRoutes.get("/", async (req, res) => {
 
 
 gameRoutes.post("/", ensureAuthenticated, ensureAdmin, async (req, res) => {
-  const { ludopediaId, title, cover, price, description } = req.body;
+  const { ludopediaId, title, cover, price, description: bodyDescription } = req.body;
 
   try {
-    const details = await getLudopediaGameDetails(Number(ludopediaId));
+    const parsedLudopediaId = Number(ludopediaId);
+    const cleanTitle = String(title || "").trim();
+    const parsedPrice = Number(String(price).replace(",", "."));
+
+    if (!parsedLudopediaId || Number.isNaN(parsedLudopediaId)) {
+      return res.status(400).json({ error: "ludopediaId inválido." });
+    }
+
+    if (!cleanTitle) {
+      return res.status(400).json({ error: "Título é obrigatório." });
+    }
+
+    if (Number.isNaN(parsedPrice) || parsedPrice < 0) {
+      return res.status(400).json({ error: "Preço inválido." });
+    }
+
+    const existingGame = await prisma.game.findFirst({
+      where: {
+        OR: [
+          { ludopediaId: parsedLudopediaId },
+          { title: { equals: cleanTitle, mode: "insensitive" } },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        ludopediaId: true,
+      },
+    });
+
+    if (existingGame) {
+      return res.status(409).json({
+        error: "Esse jogo já foi adicionado ao catálogo.",
+        code: "GAME_ALREADY_EXISTS",
+        existingGame,
+      });
+    }
+
+    const details = await getLudopediaGameDetails(parsedLudopediaId);
+
+    let finalDescription =
+      bodyDescription?.toString()?.trim() ||
+      details?.description ||
+      "";
+
+    let finalMinPlayers = details?.minPlayers || 1;
+    let finalMaxPlayers = details?.maxPlayers ?? null;
+    let finalMinAge = details?.minAge || 0;
+    let finalMinTime = details?.minTime || 0;
+    let finalMaxTime = details?.maxTime ?? null;
+
+    try {
+      const bggId = await searchBGG(cleanTitle);
+
+      if (bggId) {
+        const bggDetails = await getBGGDetails(bggId);
+
+        if (bggDetails?.description?.trim()) {
+          const translated = await translateToPT(bggDetails.description);
+
+          if (translated?.trim()) {
+            finalDescription = translated.trim();
+          }
+        }
+
+        finalMinPlayers = details?.minPlayers ?? bggDetails?.minPlayers ?? 1;
+        finalMaxPlayers = details?.maxPlayers ?? bggDetails?.maxPlayers ?? null;
+        finalMinAge = details?.minAge ?? bggDetails?.minAge ?? 0;
+        finalMinTime = details?.minTime ?? bggDetails?.minTime ?? 0;
+        finalMaxTime = details?.maxTime ?? bggDetails?.maxTime ?? null;
+      }
+    } catch (e) {
+      console.log("Erro ao enriquecer dados com BGG/tradução:", e);
+    }
 
     const game = await prisma.game.create({
       data: {
-        ludopediaId: Number(ludopediaId),
-        title,
+        ludopediaId: parsedLudopediaId,
+        title: cleanTitle,
         cover,
-        price: parseFloat(price),
+        price: parsedPrice,
         available: true,
         userId: req.user.id,
 
-        description: description?.toString() || "",
+        description: finalDescription,
         rating: details?.rating || 0,
-        minPlayers: details?.minPlayers || 1,
-        maxPlayers: details?.maxPlayers,
-        minAge: details?.minAge || 0,
-        maxTime: details?.maxTime,
+        minPlayers: finalMinPlayers,
+        maxPlayers: finalMaxPlayers,
+        minAge: finalMinAge,
+        minTime: finalMinTime,
+        maxTime: finalMaxTime,
       },
     });
 
@@ -219,7 +295,6 @@ gameRoutes.post("/", ensureAuthenticated, ensureAdmin, async (req, res) => {
     return res.status(400).json({ error: "Erro ao cadastrar jogo" });
   }
 });
-
 
 gameRoutes.get("/:id/components", ensureAuthenticated, async (req, res) => {
   const { id } = req.params;
@@ -254,7 +329,7 @@ gameRoutes.post("/:id/components", ensureAuthenticated, ensureAdmin, async (req,
     });
     return res.status(201).json(created);
   } catch (err: any) {
-    
+
     if (err?.code === "P2002") {
       return res.status(409).json({ error: "Esse componente já existe. Edite a quantidade." });
     }
@@ -321,12 +396,12 @@ gameRoutes.get("/home", async (req, res) => {
 
     const topGames = topIds.length
       ? await prisma.game.findMany({
-          where: { id: { in: topIds } },
-          include: {
-            _count: { select: { copies: true } },
-            copies: { select: { available: true } },
-          },
-        })
+        where: { id: { in: topIds } },
+        include: {
+          _count: { select: { copies: true } },
+          copies: { select: { available: true } },
+        },
+      })
       : [];
 
     const topById = new Map(topGames.map((g) => [g.id, g]));
@@ -388,7 +463,7 @@ gameRoutes.patch("/:id", ensureAuthenticated, ensureAdmin, async (req, res) => {
   if (typeof description === "string") data.description = description;
   if (typeof available === "boolean") data.available = available;
 
-  
+
   if (typeof howToPlayUrl === "string") {
     const clean = howToPlayUrl.trim();
     data.howToPlayUrl = clean.length ? clean : null;
