@@ -1,14 +1,40 @@
 import { Router } from "express";
-import path from "path";
-import fs from "fs";
+import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
 import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
 import { uploadAvatar } from "../middlewares/uploadAvatar";
-import bcrypt from "bcryptjs";
+import { cloudinary } from "../lib/cloudinary";
 
 export const userProfileRoutes = Router();
 
+function extractPublicIdFromCloudinaryUrl(url: string | null | undefined) {
+  if (!url) return null;
 
+  try {
+
+    const marker = "/upload/";
+    const idx = url.indexOf(marker);
+
+    if (idx === -1) return null;
+
+    let pathPart = url.slice(idx + marker.length);
+
+    
+    const parts = pathPart.split("/");
+    const versionIndex = parts.findIndex((part) => /^v\d+$/.test(part));
+
+    if (versionIndex >= 0) {
+      pathPart = parts.slice(versionIndex + 1).join("/");
+    }
+
+  
+    pathPart = pathPart.replace(/\.[^.]+$/, "");
+
+    return pathPart;
+  } catch {
+    return null;
+  }
+}
 
 userProfileRoutes.get("/me", ensureAuthenticated, async (req, res) => {
   try {
@@ -56,21 +82,20 @@ userProfileRoutes.get("/me", ensureAuthenticated, async (req, res) => {
   }
 });
 
-
-
 userProfileRoutes.patch("/me", ensureAuthenticated, async (req, res) => {
   try {
     const { name, phone } = req.body;
-
     const updateData: any = {};
 
     if (name) {
       const cleanName = String(name).trim();
+
       if (cleanName.length < 3) {
         return res.status(400).json({
           error: "Nome precisa ter pelo menos 3 caracteres.",
         });
       }
+
       updateData.name = cleanName;
     }
 
@@ -141,7 +166,9 @@ userProfileRoutes.patch("/me/password", ensureAuthenticated, async (req, res) =>
     }
 
     if (String(newPassword).length < 6) {
-      return res.status(400).json({ error: "A nova senha deve ter pelo menos 6 caracteres." });
+      return res.status(400).json({
+        error: "A nova senha deve ter pelo menos 6 caracteres.",
+      });
     }
 
     const user = await prisma.user.findUnique({
@@ -152,13 +179,13 @@ userProfileRoutes.patch("/me/password", ensureAuthenticated, async (req, res) =>
       return res.status(404).json({ error: "Usuário não encontrado." });
     }
 
-  
     if (user.senhaHash) {
       if (!currentPassword) {
         return res.status(400).json({ error: "A senha atual é obrigatória." });
       }
 
       const passwordOk = await bcrypt.compare(currentPassword, user.senhaHash);
+
       if (!passwordOk) {
         return res.status(400).json({ error: "Senha atual incorreta." });
       }
@@ -168,9 +195,7 @@ userProfileRoutes.patch("/me/password", ensureAuthenticated, async (req, res) =>
 
     await prisma.user.update({
       where: { id: req.user.id },
-      data: {
-        senhaHash: newHash,
-      },
+      data: { senhaHash: newHash },
     });
 
     return res.json({
@@ -191,21 +216,43 @@ userProfileRoutes.post(
   uploadAvatar.single("avatar"),
   async (req, res) => {
     try {
-      if (!req.file) {
+      const file = req.file;  
+
+      if (!file) {
         return res.status(400).json({ error: "Imagem não enviada." });
       }
-
-      const filename = req.file.filename;
-      const avatarUrl = `${req.protocol}://${req.get("host")}/uploads/avatars/${filename}`;
 
       const currentUser = await prisma.user.findUnique({
         where: { id: req.user.id },
         select: { avatar: true },
       });
 
+      const uploadResult = await new Promise<any>((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: "ludus/avatars",
+            resource_type: "image",
+            public_id: `avatar-${req.user.id}-${Date.now()}`,
+            overwrite: true,
+            transformation: [
+              { width: 512, height: 512, crop: "fill", gravity: "face" },
+              { quality: "auto", fetch_format: "auto" },
+            ],
+          },
+          (error, result) => {
+            if (error) return reject(error);
+            resolve(result);
+          }
+        );
+
+        stream.end(file.buffer);
+      });
+
       const updatedUser = await prisma.user.update({
         where: { id: req.user.id },
-        data: { avatar: avatarUrl },
+        data: {
+          avatar: uploadResult.secure_url,
+        },
         select: {
           id: true,
           name: true,
@@ -222,40 +269,41 @@ userProfileRoutes.post(
         },
       });
 
-      if (currentUser?.avatar) {
+      const oldPublicId = extractPublicIdFromCloudinaryUrl(currentUser?.avatar);
+
+      if (oldPublicId) {
         try {
-          const marker = "/uploads/avatars/";
-          const idx = currentUser.avatar.indexOf(marker);
-
-          if (idx !== -1) {
-            const oldFile = currentUser.avatar.slice(idx + marker.length);
-            const oldPath = path.resolve(
-              __dirname,
-              "../../uploads/avatars",
-              oldFile
-            );
-
-            if (fs.existsSync(oldPath)) {
-              fs.unlinkSync(oldPath);
-            }
-          }
-        } catch {}
+          await cloudinary.uploader.destroy(oldPublicId, {
+            resource_type: "image",
+          });
+        } catch (err) {
+          console.error("Erro ao remover avatar antigo do Cloudinary:", err);
+        }
       }
 
       return res.json({
         message: "Avatar atualizado com sucesso.",
         user: updatedUser,
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar avatar:", err);
+
+      if (err?.message?.includes("Formato inválido")) {
+        return res.status(400).json({ error: err.message });
+      }
+
+      if (err?.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({
+          error: "A imagem deve ter no máximo 5MB.",
+        });
+      }
+
       return res.status(500).json({
         error: "Erro ao atualizar avatar.",
       });
     }
   }
 );
-
-
 
 userProfileRoutes.delete("/me/avatar", ensureAuthenticated, async (req, res) => {
   try {
@@ -269,24 +317,16 @@ userProfileRoutes.delete("/me/avatar", ensureAuthenticated, async (req, res) => 
       data: { avatar: null },
     });
 
-    if (currentUser?.avatar) {
+    const oldPublicId = extractPublicIdFromCloudinaryUrl(currentUser?.avatar);
+
+    if (oldPublicId) {
       try {
-        const marker = "/uploads/avatars/";
-        const idx = currentUser.avatar.indexOf(marker);
-
-        if (idx !== -1) {
-          const oldFile = currentUser.avatar.slice(idx + marker.length);
-          const oldPath = path.resolve(
-            __dirname,
-            "../../uploads/avatars",
-            oldFile
-          );
-
-          if (fs.existsSync(oldPath)) {
-            fs.unlinkSync(oldPath);
-          }
-        }
-      } catch {}
+        await cloudinary.uploader.destroy(oldPublicId, {
+          resource_type: "image",
+        });
+      } catch (err) {
+        console.error("Erro ao remover avatar do Cloudinary:", err);
+      }
     }
 
     return res.json({ ok: true });

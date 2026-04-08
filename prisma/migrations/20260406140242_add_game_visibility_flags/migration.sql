@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Game" ADD COLUMN     "isActive" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "isVisible" BOOLEAN NOT NULL DEFAULT true;

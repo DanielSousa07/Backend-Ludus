@@ -12,6 +12,31 @@ enum AuthProvider {
   GOOGLE
 }
 
+enum RentalStatus {
+  PENDING
+  ACTIVE
+  RETURNED
+  CANCELED
+}
+
+enum NotificationType {
+  RENTAL_CREATED
+  RENTAL_DUE_24H
+  RENTAL_DUE_TODAY
+  RENTAL_OVERDUE
+  RENTAL_RETURN_CONFIRMED
+  RATING_SAVED
+  FAVORITE_ADDED
+  FAVORITE_REMOVED
+  EMAIL_VERIFIED
+  PHONE_VERIFIED
+  VERIFY_REQUIRED
+  POINTS_EARNED
+  LEVEL_UP
+  SYSTEM_ANNOUNCEMENT
+  GAME_BACK_AVAILABLE
+}
+
 model User {
   id    String  @id @default(uuid())
   name  String
@@ -28,9 +53,8 @@ model User {
   codeExpiresAt    DateTime?
   lastCodeSentAt   DateTime?
 
-  avatar String?
+  avatar  String?
   picture String?
-  
 
   points Int @default(0)
   level  Int @default(1)
@@ -39,7 +63,7 @@ model User {
   googleSub    String?      @unique
   authProvider AuthProvider @default(LOCAL)
 
-  termsAcceptedAt DateTime?
+  termsAcceptedAt   DateTime?
   privacyAcceptedAt DateTime?
 
   role String @default("USER")
@@ -68,26 +92,32 @@ model Game {
   cover               String?
   allowOriginalRental Boolean @default(true)
 
-  rating       Float @default(0)
+  rating       Float   @default(0)
   ratingsCount Int?
   howToPlayUrl String? @db.Text
 
-  minPlayers Int             @default(1)
+  isActive  Boolean @default(true)
+  isVisible Boolean @default(true)
+
+  minPlayers Int @default(1)
   maxPlayers Int?
-  minAge     Int             @default(0)
-  minTime    Int             @default(0)
+  minAge     Int @default(0)
+  minTime    Int @default(0)
   maxTime    Int?
-  components GameComponent[]
 
   userId String
   owner  User   @relation(fields: [userId], references: [id])
 
-  rentals   Rental[]
-  ratings   GameRating[]
-  copies    GameCopy[]
-  favorites Favorite[]
+  components GameComponent[]
+  rentals    Rental[]
+  ratings    GameRating[]
+  copies     GameCopy[]
+  favorites  Favorite[]
 
   gameAvailabilityWatches GameAvailabilityWatch[]
+
+  @@index([title])
+  @@index([ludopediaId])
 }
 
 model GameComponent {
@@ -98,7 +128,11 @@ model GameComponent {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, name])
+  @@index([gameId])
 }
 
 model Favorite {
@@ -113,6 +147,8 @@ model Favorite {
   createdAt DateTime @default(now())
 
   @@unique([userId, gameId])
+  @@index([userId])
+  @@index([gameId])
 }
 
 model UserPointsLog {
@@ -122,7 +158,7 @@ model UserPointsLog {
   reason    String
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -138,11 +174,12 @@ model GameCopy {
   updatedAt DateTime @updatedAt
 
   gameId String
-  game   Game   @relation(fields: [gameId], references: [id])
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
   rentals Rental[]
 
   @@unique([gameId, number])
+  @@index([gameId])
 }
 
 model GameRating {
@@ -158,6 +195,8 @@ model GameRating {
   game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
   @@unique([userId, gameId])
+  @@index([gameId])
+  @@index([userId])
 }
 
 model GameAvailabilityWatch {
@@ -174,13 +213,6 @@ model GameAvailabilityWatch {
   @@index([userId])
 }
 
-enum RentalStatus {
-  PENDING
-  ACTIVE
-  RETURNED
-  CANCELED
-}
-
 model Rental {
   id        String       @id @default(uuid())
   startDate DateTime     @default(now())
@@ -188,17 +220,23 @@ model Rental {
   status    RentalStatus @default(PENDING)
 
   userId String
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  gameId String
-  game   Game   @relation(fields: [gameId], references: [id])
+  gameId String?
+  game   Game?  @relation(fields: [gameId], references: [id], onDelete: SetNull)
 
   copyId String?
-  copy   GameCopy? @relation(fields: [copyId], references: [id])
+  copy   GameCopy? @relation(fields: [copyId], references: [id], onDelete: SetNull)
+
+  gameTitleSnapshot  String
+  gameCoverSnapshot  String?
+  copyCodeSnapshot   String?
+  copyNumberSnapshot Int?
 
   @@index([gameId])
   @@index([copyId])
   @@index([userId])
+  @@index([status])
 }
 
 model PushToken {
@@ -211,24 +249,6 @@ model PushToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-}
-
-enum NotificationType {
-  RENTAL_CREATED
-  RENTAL_DUE_24H
-  RENTAL_DUE_TODAY
-  RENTAL_OVERDUE
-  RENTAL_RETURN_CONFIRMED
-  RATING_SAVED
-  FAVORITE_ADDED
-  FAVORITE_REMOVED
-  EMAIL_VERIFIED
-  PHONE_VERIFIED
-  VERIFY_REQUIRED
-  POINTS_EARNED
-  LEVEL_UP
-  SYSTEM_ANNOUNCEMENT
-  GAME_BACK_AVAILABLE
 }
 
 model Notification {
@@ -248,4 +268,30 @@ model Notification {
   @@index([userId, createdAt])
   @@index([userId, readAt])
   @@index([dedupeKey])
+}
+
+model PendingRegistration {
+  id String @id @default(uuid())
+
+  name      String
+  email     String  @unique
+  phone     String? @unique
+  senhaHash String
+
+  acceptedTerms   Boolean @default(false)
+  acceptedPrivacy Boolean @default(false)
+
+  emailVerificationCode String?
+  emailCodeExpiresAt    DateTime?
+  lastEmailSentAt       DateTime?
+
+  phoneVerificationCode String?
+  phoneCodeExpiresAt    DateTime?
+  lastPhoneSentAt       DateTime?
+
+  emailVerified Boolean @default(false)
+  phoneVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
