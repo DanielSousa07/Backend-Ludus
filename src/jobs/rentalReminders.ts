@@ -1,7 +1,7 @@
 import cron from "node-cron";
+import { RentalStatus, NotificationType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { notifyUser } from "../services/notify.service";
-import { RentalStatus, NotificationType } from "@prisma/client";
 
 const OPEN_STATUSES: RentalStatus[] = [RentalStatus.PENDING, RentalStatus.ACTIVE];
 
@@ -24,11 +24,9 @@ function addDays(d: Date, days: number) {
 }
 
 export function startRentalReminderJob() {
-  
   cron.schedule("0 * * * *", async () => {
     const now = new Date();
 
-    
     const tomorrow = addDays(now, 1);
     const in24hStart = startOfDay(tomorrow);
     const in24hEnd = endOfDay(tomorrow);
@@ -42,23 +40,26 @@ export function startRentalReminderJob() {
         id: true,
         userId: true,
         endDate: true,
+        gameTitleSnapshot: true,
         game: { select: { id: true, title: true } },
       },
     });
 
     for (const r of due24h) {
+      const gameTitle = r.game?.title || r.gameTitleSnapshot;
+      const gameId = r.game?.id ?? null;
+
       await notifyUser({
         userId: r.userId,
         type: NotificationType.RENTAL_DUE_24H,
         title: "Seu aluguel vence em 24h ⏳",
-        body: `O jogo "${r.game.title}" vence amanhã. Combine a devolução na biblioteca.`,
+        body: `O jogo "${gameTitle}" vence amanhã. Combine a devolução na biblioteca.`,
         channelId: "rentals",
-        data: { route: "/rentals", rentalId: r.id, gameId: r.game.id },
+        data: { route: "/rentals", rentalId: r.id, gameId },
         dedupeKey: `RENTAL_DUE_24H:${r.id}:${startOfDay(now).toISOString()}`,
       });
     }
 
-    
     const todayStart = startOfDay(now);
     const todayEnd = endOfDay(now);
 
@@ -71,23 +72,26 @@ export function startRentalReminderJob() {
         id: true,
         userId: true,
         endDate: true,
+        gameTitleSnapshot: true,
         game: { select: { id: true, title: true } },
       },
     });
 
     for (const r of dueToday) {
+      const gameTitle = r.game?.title || r.gameTitleSnapshot;
+      const gameId = r.game?.id ?? null;
+
       await notifyUser({
         userId: r.userId,
         type: NotificationType.RENTAL_DUE_TODAY,
         title: "Seu aluguel vence hoje 📌",
-        body: `O jogo "${r.game.title}" vence hoje. Devolva na Biblioteca IFMA - Campus Timon.`,
+        body: `O jogo "${gameTitle}" vence hoje. Devolva na Biblioteca IFMA - Campus Timon.`,
         channelId: "rentals",
-        data: { route: "/rentals", rentalId: r.id, gameId: r.game.id },
+        data: { route: "/rentals", rentalId: r.id, gameId },
         dedupeKey: `RENTAL_DUE_TODAY:${r.id}:${todayStart.toISOString()}`,
       });
     }
 
-  
     const overdue = await prisma.rental.findMany({
       where: {
         status: { in: OPEN_STATUSES },
@@ -97,18 +101,22 @@ export function startRentalReminderJob() {
         id: true,
         userId: true,
         endDate: true,
+        gameTitleSnapshot: true,
         game: { select: { id: true, title: true } },
       },
     });
 
     for (const r of overdue) {
+      const gameTitle = r.game?.title || r.gameTitleSnapshot;
+      const gameId = r.game?.id ?? null;
+
       await notifyUser({
         userId: r.userId,
         type: NotificationType.RENTAL_OVERDUE,
         title: "Devolução em atraso ⚠️",
-        body: `O jogo "${r.game.title}" está em atraso. Regularize na biblioteca.`,
+        body: `O jogo "${gameTitle}" está em atraso. Regularize na biblioteca.`,
         channelId: "rentals",
-        data: { route: "/rentals", rentalId: r.id, gameId: r.game.id },
+        data: { route: "/rentals", rentalId: r.id, gameId },
         dedupeKey: `RENTAL_OVERDUE:${r.id}:${todayStart.toISOString()}`,
       });
     }
