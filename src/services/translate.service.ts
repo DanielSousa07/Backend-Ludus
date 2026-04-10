@@ -44,7 +44,7 @@ export async function translateToPT(text: string) {
 
     const translated =
       response.data?.choices?.[0]?.message?.content?.trim() || "";
-
+https://developers.openai.com/api/docs
     return translated || text;
   } catch (error: any) {
     console.log(

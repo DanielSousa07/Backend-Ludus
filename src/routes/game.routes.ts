@@ -649,6 +649,17 @@ gameRoutes.get("/:id", ensureAuthenticated, async (req, res) => {
       },
     });
 
+    const myRental = await prisma.rental.findFirst({
+      where: {
+        userId: req.user.id,
+        gameId: String(id),
+        status: {
+          in: ["PENDING", "ACTIVE"],
+        },
+      },
+      select: { id: true },
+    });
+
     const copiesCount = game._count?.copies ?? 0;
     const availableCopiesCount = (game.copies ?? []).filter((c) => c.available).length;
 
@@ -666,6 +677,7 @@ gameRoutes.get("/:id", ensureAuthenticated, async (req, res) => {
       availableCopiesCount,
       isAvailableNow,
       myRating: myRating?.value ?? null,
+      rentedByMe: !!myRental,
     });
   } catch (err) {
     console.error("Erro ao buscar jogo", err);

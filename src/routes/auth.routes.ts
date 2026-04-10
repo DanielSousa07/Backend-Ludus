@@ -443,10 +443,6 @@ router.post("/resend-email-code", async (req, res) => {
   return res.json({ message: "Novo código enviado por e-mail!" });
 });
 
-/**
- * A partir daqui, estas rotas assumem que o usuário JÁ EXISTE.
- * Ou seja: são úteis para validar telefone depois que a conta já foi criada.
- */
 router.post("/verify-phone", async (req, res) => {
   const { phone, code } = req.body;
 
@@ -461,6 +457,66 @@ router.post("/verify-phone", async (req, res) => {
     return res.status(400).json({ error: "Código inválido." });
   }
 
+
+  const pending = await prisma.pendingRegistration.findFirst({
+    where: {
+      phone: cleanPhone,
+      phoneVerificationCode: cleanCode,
+    },
+  });
+
+  if (pending) {
+    if (
+      pending.phoneCodeExpiresAt &&
+      pending.phoneCodeExpiresAt.getTime() < Date.now()
+    ) {
+      return res.status(400).json({ error: "Código expirado." });
+    }
+
+    const updatedPending = await prisma.pendingRegistration.update({
+      where: { id: pending.id },
+      data: {
+        phoneVerified: true,
+        phoneVerificationCode: null,
+        phoneCodeExpiresAt: null,
+      },
+    });
+
+    if (updatedPending.emailVerified) {
+      const createdUser = await prisma.user.create({
+        data: {
+          name: updatedPending.name,
+          email: updatedPending.email,
+          phone: updatedPending.phone,
+          senhaHash: updatedPending.senhaHash,
+          emailVerified: true,
+          phoneVerified: true,
+        },
+      });
+
+      await prisma.pendingRegistration.delete({
+        where: { id: updatedPending.id },
+      });
+
+      const token = signUserToken(createdUser.id, createdUser.role);
+
+      return res.json({
+        message: "Telefone verificado com sucesso!",
+        token,
+        user: buildUserResponse(createdUser),
+      });
+    }
+
+
+    return res.json({
+      message: "Telefone verificado com sucesso!",
+      pending: true,
+      emailVerified: updatedPending.emailVerified,
+      phoneVerified: true,
+    });
+  }
+
+  
   const user = await prisma.user.findFirst({
     where: {
       phone: cleanPhone,
@@ -500,6 +556,54 @@ router.post("/resend-code", async (req, res) => {
 
   if (!cleanPhone) {
     return res.status(400).json({ error: "Telefone é obrigatório." });
+  }
+
+  const pending = await prisma.pendingRegistration.findUnique({
+    where: { phone: cleanPhone },
+  });
+
+  if (pending) {
+    if (pending.lastPhoneSentAt) {
+      const elapsed = Date.now() - pending.lastPhoneSentAt.getTime();
+      const waitMs = 30_000 - elapsed;
+
+      if (waitMs > 0) {
+        const retryAfterSec = Math.ceil(waitMs / 1000);
+        return res.status(429).json({
+          error: `Aguarde ${retryAfterSec} segundos antes de reenviar.`,
+          code: "WAIT_BEFORE_RESEND",
+          retryAfter: retryAfterSec,
+        });
+      }
+    }
+
+    const newCode = gen6();
+    const now = new Date();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await prisma.pendingRegistration.update({
+      where: { id: pending.id },
+      data: {
+        phoneVerificationCode: newCode,
+        phoneCodeExpiresAt: expiresAt,
+        lastPhoneSentAt: now,
+      },
+    });
+
+    try {
+      await client.messages.create({
+        body: `Seu código de verificação Ludus é: ${newCode}`,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: `+55${cleanPhone}`,
+      });
+    } catch (e) {
+      return res.status(400).json({
+        error: "SMS indisponível no momento. Use verificação por e-mail.",
+        code: "SMS_UNAVAILABLE",
+      });
+    }
+
+    return res.json({ message: "Novo código enviado por SMS!" });
   }
 
   const user = await prisma.user.findUnique({
@@ -552,5 +656,4 @@ router.post("/resend-code", async (req, res) => {
 
   return res.json({ message: "Novo código enviado por SMS!" });
 });
-
 export default router;

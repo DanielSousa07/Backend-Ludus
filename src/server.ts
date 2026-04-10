@@ -23,7 +23,9 @@ startRentalReminderJob();
 app.use(cors());
 app.use(express.json());
 
-
+app.get("/health", (_req, res) => {
+  return res.status(200).json({ ok: true });
+});
 app.use("/uploads", express.static(path.resolve(__dirname, "../uploads")));
 
 app.use("/auth", authRoutes);
@@ -49,6 +51,8 @@ app.get("/users", async (_req, res) => {
   res.json(users);
 });
 
-app.listen(3000, "0.0.0.0", () => {
-  console.log("Servidor rodando em http://0.0.0.0:3000");
+const PORT = Number(process.env.PORT) || 3000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Servidor rodando em http://0.0.0.0:${PORT}`);
 });
