@@ -2,7 +2,7 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "prisma generate && tsc",
@@ -21,7 +21,6 @@
     "cheerio": "^1.2.0",
     "cloudinary": "^2.9.0",
     "cors": "^2.8.5",
-    "docker": "^1.0.0",
     "dotenv": "^17.2.3",
     "expo-server-sdk": "^6.0.0",
     "express": "^5.2.1",
@@ -34,7 +33,6 @@
     "openai": "^6.32.0",
     "resend": "^6.9.2",
     "twilio": "^5.12.1",
-    "undefined": "@react-native-google-singin/google/singin",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
