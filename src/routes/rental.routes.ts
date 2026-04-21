@@ -414,7 +414,6 @@ rentalRoutes.patch("/:id/finish", ensureAuthenticated, async (req, res) => {
       });
     }
 
-   
     const updated = await prisma.rental.update({
       where: { id: rental.id },
       data: {
@@ -423,7 +422,7 @@ rentalRoutes.patch("/:id/finish", ensureAuthenticated, async (req, res) => {
       },
     });
 
-  
+
     await incrementRentalCountAndMaybePromote(rental.userId);
 
     return res.json(updated);

@@ -656,4 +656,180 @@ router.post("/resend-code", async (req, res) => {
 
   return res.json({ message: "Novo código enviado por SMS!" });
 });
+
+
+router.post("/forgot-password", async (req, res) => {
+  const { email } = req.body;
+  const cleanEmail = (email || "").trim().toLowerCase();
+
+  if (!cleanEmail) {
+    return res.status(400).json({ error: "E-mail é obrigatório." });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+
+  
+    if (!user) {
+      return res.status(200).json({
+        message: "Se este e-mail estiver cadastrado, você receberá um código.",
+      });
+    }
+
+ 
+    if (user.lastEmailSentAt) {
+      const elapsed = Date.now() - user.lastEmailSentAt.getTime();
+      const waitMs = 30_000 - elapsed;
+
+      if (waitMs > 0) {
+        const retryAfterSec = Math.ceil(waitMs / 1000);
+        return res.status(429).json({
+          error: `Aguarde ${retryAfterSec} segundos antes de tentar novamente.`,
+          code: "WAIT_BEFORE_RESEND",
+          retryAfter: retryAfterSec,
+        });
+      }
+    }
+
+    const code = gen6();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerificationCode: code,
+        emailCodeExpiresAt: expiresAt,
+        lastEmailSentAt: new Date(),
+      },
+    });
+
+    try {
+      await resend.emails.send({
+        from: process.env.RESEND_FROM!,
+        to: [cleanEmail],
+        subject: "Redefinição de senha - Ludus",
+        html: `
+          <div style="font-family: Arial, sans-serif;">
+            <h2>Redefinição de senha</h2>
+            <p>Recebemos uma solicitação para redefinir a senha da sua conta Ludus.</p>
+            <p>Use o código abaixo:</p>
+            <div style="font-size: 32px; letter-spacing: 8px; font-weight: 700; margin: 16px 0;">
+              ${code}
+            </div>
+            <p>Este código expira em <strong>10 minutos</strong>.</p>
+            <p>Se você não solicitou isso, ignore este e-mail.</p>
+          </div>
+        `,
+      });
+    } catch (e) {
+      console.log("Falha ao enviar e-mail de redefinição (Resend):", e);
+    }
+
+    return res.status(200).json({
+      message: "Se este e-mail estiver cadastrado, você receberá um código.",
+    });
+  } catch (err) {
+    console.error("ERRO /forgot-password:", err);
+    return res.status(500).json({ error: "Erro ao processar solicitação." });
+  }
+});
+
+
+router.post("/forgot-password/verify", async (req, res) => {
+  const { email, code } = req.body;
+  const cleanEmail = (email || "").trim().toLowerCase();
+  const cleanCode = cleanDigits(code);
+
+  if (!cleanEmail) {
+    return res.status(400).json({ error: "E-mail é obrigatório." });
+  }
+
+  if (!cleanCode || cleanCode.length !== 6) {
+    return res.status(400).json({ error: "Código inválido." });
+  }
+
+  try {
+    const user = await prisma.user.findFirst({
+      where: {
+        email: cleanEmail,
+        emailVerificationCode: cleanCode,
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: "Código inválido ou expirado." });
+    }
+
+    if (user.emailCodeExpiresAt && user.emailCodeExpiresAt.getTime() < Date.now()) {
+      return res.status(400).json({ error: "Código expirado. Solicite um novo." });
+    }
+
+
+    const resetToken = jwt.sign(
+      { purpose: "password_reset" },
+      process.env.JWT_SECRET || "secret_fallback",
+      { subject: user.id, expiresIn: "5m" }
+    );
+
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerificationCode: null,
+        emailCodeExpiresAt: null,
+      },
+    });
+
+    return res.json({ resetToken });
+  } catch (err) {
+    console.error("ERRO /forgot-password/verify:", err);
+    return res.status(500).json({ error: "Erro ao verificar código." });
+  }
+});
+
+router.post("/forgot-password/reset", async (req, res) => {
+  const { resetToken, newPassword } = req.body;
+
+  if (!resetToken) {
+    return res.status(400).json({ error: "Token de redefinição inválido." });
+  }
+
+  if (!newPassword || String(newPassword).length < 6) {
+    return res.status(400).json({ error: "A senha deve ter pelo menos 6 caracteres." });
+  }
+
+  try {
+    let payload: { sub: string; purpose: string };
+
+    try {
+      payload = jwt.verify(
+        resetToken,
+        process.env.JWT_SECRET || "secret_fallback"
+      ) as any;
+    } catch {
+      return res.status(400).json({ error: "Token expirado ou inválido. Recomece o processo." });
+    }
+
+    if (payload.purpose !== "password_reset") {
+      return res.status(400).json({ error: "Token inválido." });
+    }
+
+    const userId = payload.sub;
+    const hash = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        senhaHash: hash,
+        lastEmailSentAt: null, 
+      },
+    });
+
+    return res.json({ message: "Senha redefinida com sucesso!" });
+  } catch (err) {
+    console.error("ERRO /forgot-password/reset:", err);
+    return res.status(500).json({ error: "Erro ao redefinir senha." });
+  }
+});
+
 export default router;
