@@ -10,7 +10,10 @@ import {
   setClientCategoryAdmin,
 } from "../services/category.service";
 
-export const categoryRoutes = Router();
+const categoryRoutes = Router();
+
+export { categoryRoutes };
+
 
 categoryRoutes.get("/config", (_req, res) => {
   return res.json({
@@ -28,12 +31,19 @@ categoryRoutes.get("/config", (_req, res) => {
   });
 });
 
+
 categoryRoutes.patch(
   "/games/:id/tier",
   ensureAuthenticated,
   ensureAdmin,
   async (req, res) => {
-    const { id } = req.params;
+    const idParam = req.params.id;
+
+    if (!idParam || Array.isArray(idParam)) {
+      return res.status(400).json({ error: "ID inválido." });
+    }
+
+    const id = idParam;
     const { tier } = req.body as { tier?: string };
 
     if (!tier || !Object.values(GameTier).includes(tier as GameTier)) {
@@ -76,7 +86,13 @@ categoryRoutes.patch(
   ensureAuthenticated,
   ensureAdmin,
   async (req, res) => {
-    const { id } = req.params;
+    const idParam = req.params.id;
+
+    if (!idParam || Array.isArray(idParam)) {
+      return res.status(400).json({ error: "ID inválido." });
+    }
+
+    const id = idParam;
     const { clientCategory } = req.body as { clientCategory?: string };
 
     if (
@@ -113,7 +129,6 @@ categoryRoutes.patch(
     }
   }
 );
-
 
 categoryRoutes.get(
   "/users",
@@ -166,5 +181,3 @@ categoryRoutes.get(
     }
   }
 );
-
-export default categoryRoutes;
