@@ -387,3 +387,4 @@ userProfileRoutes.delete("/me/avatar", ensureAuthenticated, async (req, res) => 
     });
   }
 });
+

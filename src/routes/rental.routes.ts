@@ -395,3 +395,40 @@ rentalRoutes.patch("/:id/cancel", ensureAuthenticated, ensureUserOnly, async (re
     return res.status(500).json({ error: "Erro ao cancelar aluguel." });
   }
 });
+
+rentalRoutes.patch("/:id/finish", ensureAuthenticated, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const rental = await prisma.rental.findUnique({
+      where: { id: String(id) },
+    });
+
+    if (!rental) {
+      return res.status(404).json({ error: "Aluguel não encontrado" });
+    }
+
+    if (rental.status !== "ACTIVE") {
+      return res.status(409).json({
+        error: "Só pode finalizar aluguel ativo",
+      });
+    }
+
+   
+    const updated = await prisma.rental.update({
+      where: { id: rental.id },
+      data: {
+        status: "RETURNED",
+        endDate: new Date(),
+      },
+    });
+
+  
+    await incrementRentalCountAndMaybePromote(rental.userId);
+
+    return res.json(updated);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao finalizar aluguel" });
+  }
+});
