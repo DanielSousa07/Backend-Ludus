@@ -4,6 +4,10 @@ import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
 import { ensureUserOnly } from "../middlewares/ensureUserOnly";
 import { notifyUser } from "../services/notify.service";
 import { notifyGameBackAvailable } from "../services/gameAvailability.service";
+import {
+  canClientRentTier,
+  incrementRentalCountAndMaybePromote,
+} from "../services/category.service";
 
 export const rentalRoutes = Router();
 
@@ -27,6 +31,24 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+
+
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          clientCategory: true,
+        },
+      });
+
+      if (!user) {
+        return {
+          status: 404,
+          body: { error: "Usuário não encontrado" },
+        } as const;
+      }
+
+
       const activeCount = await tx.rental.count({
         where: {
           userId,
@@ -38,14 +60,25 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
         return {
           status: 409,
           body: {
-            error: "Você já possui 2 aluguéis em aberto. Finalize um para alugar outro.",
+            error: "Você já possui 2 aluguéis em aberto.",
             code: "RENTAL_LIMIT_REACHED",
           },
         } as const;
       }
 
+
       const game = await tx.game.findUnique({
         where: { id: String(gameId) },
+        select: {
+          id: true,
+          title: true,
+          cover: true,
+          available: true,
+          allowOriginalRental: true,
+          isActive: true,
+          isVisible: true,
+          tier: true, 
+        },
       });
 
       if (!game || !game.isActive || !game.isVisible) {
@@ -55,6 +88,25 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
         } as const;
       }
 
+
+      if (game.tier) {
+        const allowed = canClientRentTier(
+          user.clientCategory,
+          game.tier
+        );
+
+        if (!allowed) {
+          return {
+            status: 403,
+            body: {
+              error: "Sua categoria não permite alugar este jogo.",
+              code: "TIER_ACCESS_DENIED",
+            },
+          } as const;
+        }
+      }
+
+ 
       if (!copyId && game.allowOriginalRental === false) {
         const copiesCount = await tx.gameCopy.count({
           where: { gameId: game.id },
@@ -71,6 +123,7 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
         }
       }
 
+
       if (copyId) {
         const copy = await tx.gameCopy.findUnique({
           where: { id: String(copyId) },
@@ -79,7 +132,7 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
         if (!copy || copy.gameId !== game.id) {
           return {
             status: 404,
-            body: { error: "Exemplar não encontrado para este jogo" },
+            body: { error: "Exemplar não encontrado" },
           } as const;
         }
 
@@ -105,11 +158,8 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
             copyId: copy.id,
             endDate,
             status: "PENDING",
-
             gameTitleSnapshot: game.title,
             gameCoverSnapshot: game.cover ?? null,
-            copyCodeSnapshot: copy.code ?? null,
-            copyNumberSnapshot: copy.number ?? null,
           },
         });
 
@@ -138,14 +188,10 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
         data: {
           userId,
           gameId: game.id,
-          copyId: null,
           endDate,
           status: "PENDING",
-
           gameTitleSnapshot: game.title,
           gameCoverSnapshot: game.cover ?? null,
-          copyCodeSnapshot: null,
-          copyNumberSnapshot: null,
         },
       });
 
@@ -155,8 +201,9 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
       } as const;
     });
 
+ 
     if (result.status === 201 && "id" in result.body) {
-      const rentalData = result.body as { id: string };
+      await incrementRentalCountAndMaybePromote(userId); // 👈 evolução automática
 
       const game = await prisma.game.findUnique({
         where: { id: String(gameId) },
@@ -166,20 +213,19 @@ rentalRoutes.post("/", ensureAuthenticated, ensureUserOnly, async (req, res) => 
       await notifyUser({
         userId,
         type: "RENTAL_CREATED",
-        title: "Solicitação Realizada! 🎲",
-        body: `Seu aluguel do jogo "${game?.title || "selecionado"}" está aguardando confirmação. Retire-o na Biblioteca IFMA - Campus Timon.`,
+        title: "Solicitação realizada 🎲",
+        body: `Aluguel de "${game?.title}" realizado.`,
         channelId: "rentals",
-        data: { route: "/rentals", rentalId: rentalData.id },
       });
     }
 
     return res.status(result.status).json(result.body);
+
   } catch (err) {
     console.error("Erro ao criar aluguel:", err);
     return res.status(500).json({ error: "Erro ao criar aluguel" });
   }
 });
-
 rentalRoutes.get("/me", ensureAuthenticated, async (req, res) => {
   try {
     const rentals = await prisma.rental.findMany({
