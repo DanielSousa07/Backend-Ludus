@@ -4,6 +4,22 @@ import { prisma } from "../lib/prisma";
 import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
 import { uploadAvatar } from "../middlewares/uploadAvatar";
 import { cloudinary } from "../lib/cloudinary";
+import { ClientCategory } from "@prisma/client";
+
+const CATEGORY_ORDER: ClientCategory[] = [
+  "STARTER",
+  "FAMILY",
+  "EXPERT",
+  "ULTRAGAMER",
+];
+
+const RENTALS_PER_PROMOTION = 10;
+function getNextCategory(current: ClientCategory) {
+  const idx = CATEGORY_ORDER.indexOf(current);
+  if (idx === -1 || idx === CATEGORY_ORDER.length - 1) return null;
+  return CATEGORY_ORDER[idx + 1];
+}
+
 
 export const userProfileRoutes = Router();
 
@@ -54,12 +70,20 @@ userProfileRoutes.get("/me", ensureAuthenticated, async (req, res) => {
         avatar: true,
         picture: true,
         senhaHash: true,
+        clientCategory: true,
+        totalRentalsCount: true,
       },
     });
 
     if (!user) {
       return res.status(404).json({ error: "Usuário não encontrado." });
     }
+
+    
+    const currentCount = user.totalRentalsCount || 0;
+    const progress = currentCount % RENTALS_PER_PROMOTION;
+    const remaining = RENTALS_PER_PROMOTION - progress;
+    const nextCategory = getNextCategory(user.clientCategory);
 
     return res.json({
       id: user.id,
@@ -75,6 +99,17 @@ userProfileRoutes.get("/me", ensureAuthenticated, async (req, res) => {
       avatar: user.avatar,
       picture: user.picture,
       hasPassword: !!user.senhaHash,
+
+      // 🔥 NOVO
+      clientCategory: user.clientCategory,
+      totalRentalsCount: currentCount,
+
+      categoryProgress: {
+        current: progress,
+        total: RENTALS_PER_PROMOTION,
+        remaining,
+        nextCategory,
+      },
     });
   } catch (error) {
     console.error("Erro ao buscar usuário:", error);
