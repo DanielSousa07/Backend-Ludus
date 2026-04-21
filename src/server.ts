@@ -15,6 +15,7 @@ import { notificationRoutes } from "./routes/notification.routes";
 import { startRentalReminderJob } from "./jobs/rentalReminders";
 import { gameWatchRoutes } from "./routes/gameWatch.routes";
 import { userProfileRoutes } from "./routes/userProfile.routes";
+import { categoryRoutes } from "./routes/category.routes";
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use("/admin/rentals", adminRentalRoutes);
 app.use("/engagement", engagementRoutes);
 app.use("/users", pushTokenRoutes);
 app.use("/users", userProfileRoutes);
+app.use("/categories", categoryRoutes);
 app.use("/notifications", notificationRoutes);
 
 app.get("/", (_req, res) => {

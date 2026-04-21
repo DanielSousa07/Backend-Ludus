@@ -19,6 +19,23 @@ enum RentalStatus {
   CANCELED
 }
 
+
+enum GameTier {
+  LATAO
+  BRONZE
+  PRATA
+  OURO
+  DIAMANTE
+}
+
+
+enum ClientCategory {
+  STARTER
+  FAMILY
+  EXPERT
+  ULTRAGAMER
+}
+
 enum NotificationType {
   RENTAL_CREATED
   RENTAL_DUE_24H
@@ -68,6 +85,10 @@ model User {
 
   role String @default("USER")
 
+
+  clientCategory    ClientCategory @default(STARTER)
+  totalRentalsCount Int            @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -98,6 +119,9 @@ model Game {
 
   isActive  Boolean @default(true)
   isVisible Boolean @default(true)
+
+
+  tier GameTier @default(BRONZE)
 
   minPlayers Int @default(1)
   maxPlayers Int?

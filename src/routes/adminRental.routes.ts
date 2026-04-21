@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma";
 import { ensureAuthenticated } from "../middlewares/ensureAuthenticated";
 import { ensureAdmin } from "../middlewares/ensureAdmin";
 import { addUserPoints } from "../services/engagement.service";
+import { incrementRentalCountAndMaybePromote } from "../services/category.service";
 import { notifyUser } from "../services/notify.service";
 import { notifyGameBackAvailable } from "../services/gameAvailability.service";
 
@@ -163,7 +164,7 @@ adminRentalRoutes.patch("/:id/status", ensureAuthenticated, ensureAdmin, async (
           reason: `RENTAL_CONFIRMED_BY_ADMIN:${updated.id}`,
         });
 
-        await notifyUser({
+  await notifyUser({
           userId: updated.userId,
           type: NotificationType.RENTAL_CREATED,
           title: "Aluguel Confirmado! ✅",
@@ -171,6 +172,9 @@ adminRentalRoutes.patch("/:id/status", ensureAuthenticated, ensureAdmin, async (
           channelId: "rentals",
           data: { route: "/rentals", rentalId: updated.id },
         });
+
+        // RF020 — Progressão automática de categoria de cliente
+        await incrementRentalCountAndMaybePromote(updated.userId);
       } catch (err) {
         console.error("Erro ao processar pontos ou notificação de confirmação:", err);
       }
