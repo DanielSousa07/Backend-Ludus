@@ -6,6 +6,7 @@ import { uploadAvatar } from "../middlewares/uploadAvatar";
 import { cloudinary } from "../lib/cloudinary";
 import { ClientCategory } from "@prisma/client";
 
+
 const CATEGORY_ORDER: ClientCategory[] = [
   "STARTER",
   "FAMILY",
@@ -70,6 +71,8 @@ userProfileRoutes.get("/me", ensureAuthenticated, async (req, res) => {
         avatar: true,
         picture: true,
         senhaHash: true,
+
+
         clientCategory: true,
         totalRentalsCount: true,
       },
@@ -79,10 +82,23 @@ userProfileRoutes.get("/me", ensureAuthenticated, async (req, res) => {
       return res.status(404).json({ error: "Usuário não encontrado." });
     }
 
-    
-    const currentCount = user.totalRentalsCount || 0;
-    const progress = currentCount % RENTALS_PER_PROMOTION;
-    const remaining = RENTALS_PER_PROMOTION - progress;
+    const currentCount = user.totalRentalsCount ?? 0;
+
+ 
+    const rawProgress = currentCount % RENTALS_PER_PROMOTION;
+
+    const progress =
+      currentCount === 0
+        ? 0
+        : rawProgress === 0
+        ? RENTALS_PER_PROMOTION
+        : rawProgress;
+
+    const remaining =
+      progress === RENTALS_PER_PROMOTION
+        ? 0
+        : RENTALS_PER_PROMOTION - progress;
+
     const nextCategory = getNextCategory(user.clientCategory);
 
     return res.json({
@@ -100,7 +116,6 @@ userProfileRoutes.get("/me", ensureAuthenticated, async (req, res) => {
       picture: user.picture,
       hasPassword: !!user.senhaHash,
 
-      // 🔥 NOVO
       clientCategory: user.clientCategory,
       totalRentalsCount: currentCount,
 
